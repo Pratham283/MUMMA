@@ -59,6 +59,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "MySQL Windows service installation failed with exit code $LASTEXITCODE."
 }
 
+Set-Service -Name $serviceName -StartupType Automatic
 Start-Service -Name $serviceName
 $service = Get-Service -Name $serviceName
 $service.WaitForStatus("Running", [TimeSpan]::FromSeconds(45))

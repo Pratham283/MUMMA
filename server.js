@@ -728,7 +728,34 @@ app.use((error, req, res, next) => {
 
 async function startServer() {
     await fs.mkdir(uploadDirectory, { recursive: true });
-    await pool.query("SELECT 1");
+    const databaseWaitTimeout = 60 * 1000;
+    const retryableDatabaseErrors = new Set([
+        "ECONNREFUSED",
+        "ETIMEDOUT",
+        "EHOSTUNREACH",
+        "ENETUNREACH",
+        "PROTOCOL_CONNECTION_LOST",
+    ]);
+    const databaseWaitStarted = Date.now();
+    let hasLoggedDatabaseWait = false;
+
+    while (true) {
+        try {
+            await pool.query("SELECT 1");
+            break;
+        } catch (error) {
+            if (!retryableDatabaseErrors.has(error.code) || Date.now() - databaseWaitStarted >= databaseWaitTimeout) {
+                throw error;
+            }
+
+            if (!hasLoggedDatabaseWait) {
+                console.log("Waiting for MySQL to become available before starting the website...");
+                hasLoggedDatabaseWait = true;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+    }
+
     const server = app.listen(port);
     await new Promise((resolve, reject) => {
         server.once("listening", resolve);

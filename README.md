@@ -51,6 +51,10 @@ The site runs as a Node.js/Express application. MySQL stores admissions enquirie
    npm.cmd start
    ```
 
+   The Windows MySQL service is configured to start automatically. The Node.js server waits for MySQL to accept connections before listening; if MySQL is still starting, it retries for up to 60 seconds.
+
+   If you configured MySQL before this automatic-start setting was added, open PowerShell as Administrator and run `Set-Service -Name MySQL84 -StartupType Automatic; Start-Service -Name MySQL84` once.
+
    Visit `http://localhost:3001` for the website and `http://localhost:3001/admin` for the protected admin dashboard. After signing in, use the dashboard menu to open Notices, School memories, Activities, or Enquiries on their own pages.
 
    Use this Node.js address for the admission form; a static preview server cannot submit enquiries. If startup reports that port 3001 is already in use, stop the other server or set `PORT` to a free port, then open the website on that port.
