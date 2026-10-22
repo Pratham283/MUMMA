@@ -45,7 +45,7 @@ port=3306
 bind-address=127.0.0.1
 mysqlx=0
 character-set-server=utf8mb4
-collation-server=utf8mb4_0900_ai_ci
+collation-server=utf8mb4_unicode_ci
 "@
 [System.IO.File]::WriteAllText($configPath, $config, [System.Text.UTF8Encoding]::new($false))
 

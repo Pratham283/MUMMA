@@ -73,6 +73,26 @@ try {
 }
 ```
 
+## Hostinger / shared-hosting MySQL notes
+
+If the database is hosted on Hostinger or another shared MySQL provider, keep the connection settings in `.env` compatible with their server:
+
+- Use `DB_HOST` for the hostname they provide, or `DB_SOCKET` when they expose a local socket.
+- Leave `DB_PORT` at `3306` unless the provider says otherwise.
+- Keep the database collation as `utf8mb4_unicode_ci` (the app avoids MySQL 8-only collation names such as `utf8mb4_0900_ai_ci`).
+- If the provider requires SSL, set `DB_SSL_CA` to the CA file path you uploaded with the site.
+
+Example for Hostinger-style config:
+
+```env
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=u123456789_school
+DB_PASSWORD=your-password
+DB_NAME=u123456789_schooldb
+SESSION_SECRET=replace-this-with-a-random-secret-at-least-32-characters-long
+```
+
 ## Alternative: start MySQL with Docker Compose
 
 If you prefer Docker, create `.env` from `.env.example`, set a strong `DB_PASSWORD` and a fresh random `SESSION_SECRET`, and start the database container:

@@ -39,9 +39,12 @@ const pool = mysql.createPool({
     password: process.env.DB_PASSWORD || "",
     database: databaseName,
     charset: "utf8mb4",
+    timezone: "+00:00",
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
+    ...(process.env.DB_SOCKET ? { socketPath: process.env.DB_SOCKET } : {}),
+    ...(process.env.DB_SSL_CA ? { ssl: { ca: process.env.DB_SSL_CA } } : {}),
 });
 
 const MySQLStore = MySQLStoreFactory(session);

@@ -17,6 +17,9 @@ async function initializeDatabase() {
         user: process.env.DB_USER || "root",
         password: process.env.DB_PASSWORD || "",
         charset: "utf8mb4",
+        timezone: "+00:00",
+        ...(process.env.DB_SOCKET ? { socketPath: process.env.DB_SOCKET } : {}),
+        ...(process.env.DB_SSL_CA ? { ssl: { ca: process.env.DB_SSL_CA } } : {}),
     });
 
     try {
