@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Enquiry Inbox Admin - Mumma's Proud Junior Wing School</title>
+    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/admin.css">
+    <script src="/admin.js" defer></script>
+</head>
+<body class="admin-page">
+    <header class="admin-header">
+        <a class="brand" href="/" aria-label="Mumma's Proud Junior Wing School home">
+            <img src="/logo.png" alt="">
+            <span class="brand-copy"><strong>Mumma's Proud</strong><span>School administration</span></span>
+        </a>
+        <a class="admin-home-link" href="/">View school website <span aria-hidden="true">↗</span></a>
+    </header>
+    <main class="admin-main">
+        <section class="admin-login-card" id="login-panel" aria-labelledby="login-title" hidden>
+            <p class="section-eyebrow">School administration</p>
+            <h1 id="login-title">Sign in to your dashboard</h1>
+            <p class="admin-intro">Manage school activities, gallery photos, notices, and admission enquiries.</p>
+            <form id="login-form">
+                <label for="admin-email">Email address</label>
+                <input id="admin-email" name="email" type="email" autocomplete="username" maxlength="254" required>
+                <label for="admin-password">Password</label>
+                <input id="admin-password" name="password" type="password" autocomplete="current-password" required>
+                <button class="admin-primary-button" type="submit">Sign in</button>
+                <p class="admin-message" id="login-message" role="status" aria-live="polite"></p>
+            </form>
+        </section>
+        <section class="admin-dashboard" id="dashboard-panel" hidden>
+            <div class="admin-title-row">
+                <div>
+                    <p class="section-eyebrow">School administration</p>
+                    <h1>Admin dashboard</h1>
+                    <p class="admin-intro" id="admin-identity"></p>
+                </div>
+                <button class="admin-secondary-button" id="logout-button" type="button">Sign out</button>
+            </div>
+            <p class="admin-message" id="dashboard-message" role="status" aria-live="polite"></p>
+            <nav class="admin-page-nav" aria-label="Admin sections">
+                <a href="/admin/notices">Notices</a>
+                <a href="/admin/memories">School memories</a>
+                <a href="/admin/activities">Activities</a>
+                <a href="/admin/enquiries" aria-current="page">Enquiries</a>
+            </nav>
+            <section class="admin-section" aria-labelledby="enquiries-title">
+                <div class="admin-section-heading">
+                    <div><p class="section-eyebrow">Admissions</p><h2 id="enquiries-title">Enquiry inbox</h2></div>
+                </div>
+                <div class="admin-enquiry-list" id="admin-enquiries" aria-live="polite"></div>
+            </section>
+        </section>
+    </main>
+</body>
+</html>

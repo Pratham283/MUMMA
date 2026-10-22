@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>School Admin - Mumma's Proud Junior Wing School</title>
+    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/admin.css">
+    <script src="/admin.js" defer></script>
+</head>
+<body class="admin-page">
+    <header class="admin-header">
+        <a class="brand" href="/" aria-label="Mumma's Proud Junior Wing School home">
+            <img src="/logo.png" alt="">
+            <span class="brand-copy">
+                <strong>Mumma's Proud</strong>
+                <span>School administration</span>
+            </span>
+        </a>
+        <a class="admin-home-link" href="/">View school website <span aria-hidden="true">↗</span></a>
+    </header>
+    <main class="admin-main">
+        <section class="admin-login-card" id="login-panel" aria-labelledby="login-title" hidden>
+            <p class="section-eyebrow">School administration</p>
+            <h1 id="login-title">Sign in to your dashboard</h1>
+            <p class="admin-intro">Manage school activities, gallery photos, notices, and admission enquiries.</p>
+            <form id="login-form">
+                <label for="admin-email">Email address</label>
+                <input id="admin-email" name="email" type="email" autocomplete="username" maxlength="254" required>
+                <label for="admin-password">Password</label>
+                <input id="admin-password" name="password" type="password" autocomplete="current-password" required>
+                <button class="admin-primary-button" type="submit">Sign in</button>
+                <p class="admin-message" id="login-message" role="status" aria-live="polite"></p>
+            </form>
+        </section>
+
+        <section class="admin-dashboard" id="dashboard-panel" hidden>
+            <div class="admin-title-row">
+                <div>
+                    <p class="section-eyebrow">School administration</p>
+                    <h1>Admin dashboard</h1>
+                    <p class="admin-intro" id="admin-identity"></p>
+                </div>
+                <button class="admin-secondary-button" id="logout-button" type="button">Sign out</button>
+            </div>
+            <p class="admin-message" id="dashboard-message" role="status" aria-live="polite"></p>
+            <nav class="admin-page-nav" aria-label="Admin sections">
+                <a href="/admin/notices" aria-current="page">Notices</a>
+                <a href="/admin/memories">School memories</a>
+                <a href="/admin/activities">Activities</a>
+                <a href="/admin/enquiries">Enquiries</a>
+            </nav>
+
+            <section class="admin-section" aria-labelledby="notices-title">
+                <div class="admin-section-heading">
+                    <div>
+                        <p class="section-eyebrow">School updates</p>
+                        <h2 id="notices-title">Manage notices</h2>
+                    </div>
+                </div>
+                <form class="notice-admin-form" id="notice-form">
+                    <label class="notice-admin-title">
+                        Notice title
+                        <input name="title" type="text" maxlength="160" required>
+                    </label>
+                    <label class="notice-admin-priority">
+                        Priority
+                        <select name="priority" required>
+                            <option value="normal">Normal</option>
+                            <option value="important">Important</option>
+                            <option value="urgent">Urgent</option>
+                        </select>
+                    </label>
+                    <label class="notice-admin-expiry">
+                        Hide after <span>(optional)</span>
+                        <input name="expiresAt" type="datetime-local">
+                    </label>
+                    <label class="notice-admin-body">
+                        Notice details
+                        <textarea name="body" rows="4" maxlength="5000" required></textarea>
+                    </label>
+                    <button class="admin-primary-button" type="submit">Publish notice</button>
+                </form>
+                <div class="admin-notice-list" id="admin-notices" aria-live="polite"></div>
+            </section>
+        </section>
+    </main>
+</body>
+</html>
