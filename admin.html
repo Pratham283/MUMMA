@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
-    <title>School Admin - Mumma's Proud Junior Wing School</title>
+    <title>School Admin Panel | Mumma's Proud</title>
+    <link rel="icon" href="/logo.png" type="image/png">
     <link rel="stylesheet" href="/style.css">
     <link rel="stylesheet" href="/admin.css">
     <script src="/admin.js" defer></script>
@@ -15,7 +16,7 @@
             <img src="/logo.png" alt="">
             <span class="brand-copy">
                 <strong>Mumma's Proud</strong>
-                <span>School administration</span>
+                <span>School admin panel</span>
             </span>
         </a>
         <a class="admin-home-link" href="/">View school website <span aria-hidden="true">↗</span></a>
@@ -23,13 +24,13 @@
     <main class="admin-main">
         <section class="admin-login-card" id="login-panel" aria-labelledby="login-title" hidden>
             <p class="section-eyebrow">School administration</p>
-            <h1 id="login-title">Sign in to your dashboard</h1>
-            <p class="admin-intro">Manage school activities, gallery photos, notices, and admission enquiries.</p>
+            <h1 id="login-title">School admin panel</h1>
+            <p class="admin-intro">Sign in to manage school notices, activities, gallery, and admission enquiries.</p>
             <form id="login-form">
                 <label for="admin-email">Email address</label>
                 <input id="admin-email" name="email" type="email" autocomplete="username" maxlength="254" required>
                 <label for="admin-password">Password</label>
-                <input id="admin-password" name="password" type="password" autocomplete="current-password" required>
+                <input id="admin-password" name="password" type="password" autocomplete="current-password" maxlength="256" required>
                 <button class="admin-primary-button" type="submit">Sign in</button>
                 <p class="admin-message" id="login-message" role="status" aria-live="polite"></p>
             </form>
@@ -39,50 +40,121 @@
             <div class="admin-title-row">
                 <div>
                     <p class="section-eyebrow">School administration</p>
-                    <h1>Admin dashboard</h1>
+                    <h1>School admin panel</h1>
                     <p class="admin-intro" id="admin-identity"></p>
                 </div>
                 <button class="admin-secondary-button" id="logout-button" type="button">Sign out</button>
             </div>
             <p class="admin-message" id="dashboard-message" role="status" aria-live="polite"></p>
             <nav class="admin-page-nav" aria-label="Admin sections">
-                <a href="/admin/notices" aria-current="page">Notices</a>
-                <a href="/admin/memories">School memories</a>
-                <a href="/admin/activities">Activities</a>
-                <a href="/admin/enquiries">Enquiries</a>
+                <a href="#admin-notices">Notices</a>
+                <a href="#admin-activities">Activities</a>
+                <a href="#admin-gallery">Gallery</a>
+                <a href="#admin-admissions">Enquiries</a>
             </nav>
-
-            <section class="admin-section" aria-labelledby="notices-title">
+            <section class="admin-section" id="admin-notices" aria-labelledby="admin-notices-title">
                 <div class="admin-section-heading">
                     <div>
-                        <p class="section-eyebrow">School updates</p>
-                        <h2 id="notices-title">Manage notices</h2>
+                        <p class="section-eyebrow">Website updates</p>
+                        <h2 id="admin-notices-title">Notices</h2>
                     </div>
                 </div>
+                <p class="admin-intro">Add, edit, or remove notices shown on the home page and the separate Notices page. Changes are saved directly in a JSON content file, not the enquiries database.</p>
                 <form class="notice-admin-form" id="notice-form">
-                    <label class="notice-admin-title">
-                        Notice title
-                        <input name="title" type="text" maxlength="160" required>
+                    <input type="hidden" name="id">
+                    <label class="notice-admin-title">Notice title
+                        <input name="title" maxlength="120" required>
                     </label>
-                    <label class="notice-admin-priority">
-                        Priority
-                        <select name="priority" required>
+                    <label>Display date
+                        <input name="date" type="date" required>
+                    </label>
+                    <label>Priority
+                        <select name="priority">
                             <option value="normal">Normal</option>
                             <option value="important">Important</option>
                             <option value="urgent">Urgent</option>
                         </select>
                     </label>
-                    <label class="notice-admin-expiry">
-                        Hide after <span>(optional)</span>
-                        <input name="expiresAt" type="datetime-local">
+                    <label class="notice-admin-body">Notice details
+                        <textarea name="body" maxlength="2000" required></textarea>
                     </label>
-                    <label class="notice-admin-body">
-                        Notice details
-                        <textarea name="body" rows="4" maxlength="5000" required></textarea>
-                    </label>
-                    <button class="admin-primary-button" type="submit">Publish notice</button>
+                    <button class="admin-primary-button" type="submit">Add notice</button>
+                    <button class="admin-secondary-button" type="button" data-cancel-edit="notices" hidden>Cancel edit</button>
                 </form>
-                <div class="admin-notice-list" id="admin-notices" aria-live="polite"></div>
+                <div class="admin-notice-list" id="admin-notice-list" aria-live="polite"></div>
+            </section>
+
+            <section class="admin-section" id="admin-activities" aria-labelledby="admin-activities-title">
+                <div class="admin-section-heading">
+                    <div>
+                        <p class="section-eyebrow">Learning by doing</p>
+                        <h2 id="admin-activities-title">Activities</h2>
+                    </div>
+                </div>
+                <p class="admin-intro">Manage activity cards on the home page and the separate Activities page. Use a website image path (for example /school-building.jpeg) or an HTTPS image URL.</p>
+                <form class="activity-admin-form" id="activity-form">
+                    <input type="hidden" name="id">
+                    <label>Activity title
+                        <input name="title" maxlength="100" required>
+                    </label>
+                    <label>Category
+                        <input name="category" maxlength="120" required>
+                    </label>
+                    <label class="activity-admin-description">Description
+                        <textarea name="description" maxlength="1500" required></textarea>
+                    </label>
+                    <label class="activity-admin-photo">Image path or HTTPS URL
+                        <input name="image" type="text" placeholder="/school-building.jpeg or https://example.com/photo.jpg" required>
+                    </label>
+                    <label class="activity-admin-photo">Image description (alt text)
+                        <input name="alt" maxlength="250">
+                    </label>
+                    <button class="admin-primary-button" type="submit">Add activity</button>
+                    <button class="admin-secondary-button" type="button" data-cancel-edit="activities" hidden>Cancel edit</button>
+                </form>
+                <div class="admin-notice-list" id="admin-activity-list" aria-live="polite"></div>
+            </section>
+
+            <section class="admin-section" id="admin-gallery" aria-labelledby="admin-gallery-title">
+                <div class="admin-section-heading">
+                    <div>
+                        <p class="section-eyebrow">School memories</p>
+                        <h2 id="admin-gallery-title">Gallery</h2>
+                    </div>
+                </div>
+                <p class="admin-intro">Add, edit, or remove gallery photos shown on the home page and the separate Gallery page. Use a website image path (for example /school-building.jpeg) or an HTTPS image URL.</p>
+                <form class="activity-admin-form" id="gallery-form">
+                    <input type="hidden" name="id">
+                    <label>Photo title
+                        <input name="title" maxlength="100" required>
+                    </label>
+                    <label>Caption
+                        <input name="caption" maxlength="120" required>
+                    </label>
+                    <label class="activity-admin-photo">Image path or HTTPS URL
+                        <input name="image" type="text" placeholder="/school-building.jpeg or https://example.com/photo.jpg" required>
+                    </label>
+                    <label class="activity-admin-photo">Image description (alt text)
+                        <input name="alt" maxlength="250">
+                    </label>
+                    <button class="admin-primary-button" type="submit">Add photo</button>
+                    <button class="admin-secondary-button" type="button" data-cancel-edit="gallery" hidden>Cancel edit</button>
+                </form>
+                <div class="admin-gallery-grid" id="admin-gallery-list" aria-live="polite"></div>
+            </section>
+
+            <section class="admin-section" id="admin-admissions" aria-labelledby="enquiries-title">
+                <div class="admin-section-heading">
+                    <div>
+                        <p class="section-eyebrow">Admissions</p>
+                        <h2 id="enquiries-title">Parent and guardian enquiries</h2>
+                    </div>
+                    <button class="admin-secondary-button" id="refresh-enquiries" type="button">Refresh</button>
+                </div>
+                <p class="admin-intro">Showing the latest 500 enquiries from the private SQLite database.</p>
+                <div class="admin-enquiry-list" id="admin-enquiries" aria-live="polite">
+                    <p class="admin-empty">Loading enquiries…</p>
+                </div>
             </section>
         </section>
     </main>

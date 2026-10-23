@@ -402,6 +402,26 @@
     grid-row: 1;
 }
 
+.admin-content-actions {
+    display: flex;
+    flex-wrap: wrap;
+    grid-column: 2;
+    grid-row: 1;
+    gap: 8px;
+}
+
+.admin-content-actions .admin-secondary-button {
+    min-height: 36px;
+}
+
+.admin-content-preview {
+    width: 100%;
+    max-width: 170px;
+    height: 110px;
+    border-radius: 9px;
+    object-fit: cover;
+}
+
 .admin-gallery-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -429,6 +449,10 @@
     padding: 13px;
 }
 
+.admin-gallery-card .admin-content-actions {
+    padding: 0 13px 13px;
+}
+
 .admin-gallery-details h3,
 .admin-enquiry-heading h3 {
     color: #193761;
@@ -453,7 +477,7 @@
 
 .admin-enquiry-card {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     align-items: start;
     gap: 12px 20px;
     padding: 17px;
@@ -470,7 +494,7 @@
 .admin-enquiry-details {
     display: grid;
     gap: 3px;
-    grid-column: 1;
+    grid-column: 1 / -1;
 }
 
 .admin-enquiry-details a {
@@ -552,6 +576,11 @@
     }
 
     .admin-notice-card .admin-danger-button {
+        grid-column: auto;
+        grid-row: auto;
+    }
+
+    .admin-content-actions {
         grid-column: auto;
         grid-row: auto;
     }

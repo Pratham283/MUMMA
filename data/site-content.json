@@ -1,0 +1,66 @@
+{
+  "notices": [],
+  "activities": [
+    {
+      "id": "table-manners",
+      "title": "Table Manners",
+      "category": "Everyday life skills",
+      "description": "Children practise polite mealtime habits, sharing, and using tableware with care—building independence and respect for others.",
+      "image": "/activity-table-manners.jpeg",
+      "alt": "Children practising table manners together at school"
+    },
+    {
+      "id": "mystery-box",
+      "title": "Mystery Box",
+      "category": "Curiosity & discovery",
+      "description": "Guessing what is inside encourages children to observe, describe what they notice, ask questions, and express their ideas with confidence.",
+      "image": "/activity-mystery-box.jpeg",
+      "alt": "Children exploring a mystery learning box with their teacher"
+    },
+    {
+      "id": "finger-activity",
+      "title": "Finger Activity",
+      "category": "Creative exploration",
+      "description": "Hands-on finger activities help little learners practise fine motor control and hand–eye coordination while exploring colour, texture, and creativity.",
+      "image": "/activity-finger-painting.jpeg",
+      "alt": "Children taking part in a colourful finger activity"
+    }
+  ],
+  "gallery": [
+    {
+      "id": "school",
+      "title": "A happy place to grow",
+      "caption": "Welcome to our school",
+      "image": "/school-building.jpeg",
+      "alt": "The Mumma's Proud Junior Wing School building"
+    },
+    {
+      "id": "table-manners",
+      "title": "Table manners",
+      "caption": "Everyday life skills",
+      "image": "/activity-table-manners.jpeg",
+      "alt": "Children learning table manners together at school"
+    },
+    {
+      "id": "mystery-box",
+      "title": "Mystery box",
+      "caption": "Curiosity in action",
+      "image": "/activity-mystery-box.jpeg",
+      "alt": "Children discovering objects in a mystery learning box"
+    },
+    {
+      "id": "finger-activity",
+      "title": "Finger activity",
+      "caption": "Learning by creating",
+      "image": "/activity-finger-painting.jpeg",
+      "alt": "Young children sharing their work during a finger activity"
+    },
+    {
+      "id": "republic-day",
+      "title": "Republic Day",
+      "caption": "School celebration",
+      "image": "/founder-harshita.jpeg",
+      "alt": "A teacher at the school's Republic Day celebration"
+    }
+  ]
+}

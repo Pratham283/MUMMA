@@ -1,132 +1,95 @@
 # Mumma's Proud Junior Wing School
 
-The site runs as a Node.js/Express application. MySQL stores admissions enquiries, administrator sessions, admin accounts, gallery records, and school activities; uploaded photos are converted to WebP and kept in the local `uploads` folder.
+The school website runs on Node.js and stores admission enquiries in a local SQLite database. Notices, activities, and gallery entries are saved directly in `data/site-content.json`, not in the database. The website does not use MySQL.
 
 ## Requirements
 
-- Node.js 20 or newer
-- MySQL 8.0 or newer, either installed locally or started with Docker Compose
+- Node.js 22.13 or newer (`node:sqlite` is built into Node.js)
 
-## First-time setup (Windows PowerShell)
+## Start the website (Windows PowerShell)
 
-1. Install the Node dependencies:
-
-   ```powershell
-   npm.cmd install
-   ```
-
-2. For a local Windows MySQL service, install MySQL Server if needed:
-
-   ```powershell
-   winget install --id Oracle.MySQL --exact
-   ```
-
-3. Open PowerShell as Administrator, change to the website folder, and configure the local MySQL service and application database:
-
-   ```powershell
-   powershell.exe -ExecutionPolicy Bypass -File .\db\setup-mysql-windows.ps1
-   ```
-
-   The setup script binds MySQL to localhost, generates a unique database password and session secret, writes them to the ignored `.env` file, and seeds the initial gallery photos and activities.
-
-4. Create the first administrator. The password prompt is hidden; use a unique password with at least 12 characters:
-
-   ```powershell
-   $secure = Read-Host "Create an admin password (12+ characters)" -AsSecureString
-   $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
-   try {
-       $env:ADMIN_EMAIL = Read-Host "Admin email"
-       $env:ADMIN_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
-       npm.cmd run admin:create
-   } finally {
-       Remove-Item Env:ADMIN_EMAIL, Env:ADMIN_PASSWORD -ErrorAction SilentlyContinue
-       [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
-       $secure.Dispose()
-   }
-   ```
-
-5. Start the website and open it in a browser:
-
-   ```powershell
-   npm.cmd start
-   ```
-
-   The Windows MySQL service is configured to start automatically. The Node.js server waits for MySQL to accept connections before listening; if MySQL is still starting, it retries for up to 60 seconds.
-
-   If you configured MySQL before this automatic-start setting was added, open PowerShell as Administrator and run `Set-Service -Name MySQL84 -StartupType Automatic; Start-Service -Name MySQL84` once.
-
-   Visit `http://localhost:3001` for the website and `http://localhost:3001/admin` for the protected admin dashboard. After signing in, use the dashboard menu to open Notices, School memories, Activities, or Enquiries on their own pages.
-
-   Use this Node.js address for the admission form; a static preview server cannot submit enquiries. If startup reports that port 3001 is already in use, stop the other server or set `PORT` to a free port, then open the website on that port.
-
-   In VS Code, run the **Start school website backend** task, then open the project with Live Server at `http://127.0.0.1:3000`. The workspace configures Live Server to proxy requests to the Express backend on port 3001, so `/admin` and its API requests work through the usual Live Server URL. Reload the VS Code window once after the workspace proxy settings change.
-
-To reset an existing administrator's password, run this in PowerShell from the website folder. Use the email already registered for the admin account and choose a unique password of at least 12 characters:
+1. Install the dependencies:
 
 ```powershell
-$secure = Read-Host "New admin password (12+ characters)" -AsSecureString
+npm.cmd install
+```
+
+2. Create the first admin account. This stores only a salted password hash in the private SQLite database. Enter a unique password of at least 12 characters when prompted:
+
+```powershell
+$secure = Read-Host "Admin password (12+ characters)" -AsSecureString
 $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
 try {
-    $env:ADMIN_EMAIL = Read-Host "Existing admin email"
-    $env:ADMIN_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
-    npm.cmd run admin:reset
+    $env:ADMIN_BOOTSTRAP_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+    $hash = node .\scripts\hash-admin-password.js
+    if ($LASTEXITCODE -ne 0) { throw "Could not create the admin password hash." }
+    $secretBytes = New-Object byte[] 48
+    $random = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $random.GetBytes($secretBytes)
+    $sessionSecret = [Convert]::ToBase64String($secretBytes)
+    $random.Dispose()
+    $configuration = @"
+NODE_ENV=development
+PORT=3001
+SESSION_SECRET=$sessionSecret
+ADMIN_EMAIL=mummaproud2003@gmail.com
+ADMIN_PASSWORD_HASH=$hash
+ADMIN_ALLOWED_ORIGINS=http://127.0.0.1:3000
+"@
+    [System.IO.File]::WriteAllText((Join-Path (Get-Location) ".env"), $configuration, [System.Text.UTF8Encoding]::new($false))
 } finally {
-    Remove-Item Env:ADMIN_EMAIL, Env:ADMIN_PASSWORD -ErrorAction SilentlyContinue
+    Remove-Item Env:ADMIN_BOOTSTRAP_PASSWORD -ErrorAction SilentlyContinue
     [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
     $secure.Dispose()
 }
 ```
 
-## Hostinger / shared-hosting MySQL notes
-
-If the database is hosted on Hostinger or another shared MySQL provider, keep the connection settings in `.env` compatible with their server:
-
-- Use `DB_HOST` for the hostname they provide, or `DB_SOCKET` when they expose a local socket.
-- Leave `DB_PORT` at `3306` unless the provider says otherwise.
-- Keep the database collation as `utf8mb4_unicode_ci` (the app avoids MySQL 8-only collation names such as `utf8mb4_0900_ai_ci`).
-- If the provider requires SSL, set `DB_SSL_CA` to the CA file path you uploaded with the site.
-
-Example for Hostinger-style config:
-
-```env
-DB_HOST=localhost
-DB_PORT=3306
-DB_USER=u123456789_school
-DB_PASSWORD=your-password
-DB_NAME=u123456789_schooldb
-SESSION_SECRET=replace-this-with-a-random-secret-at-least-32-characters-long
-```
-
-## Alternative: start MySQL with Docker Compose
-
-If you prefer Docker, create `.env` from `.env.example`, set a strong `DB_PASSWORD` and a fresh random `SESSION_SECRET`, and start the database container:
+3. Start the website:
 
 ```powershell
-Copy-Item .env.example .env
-docker compose up -d db
-npm.cmd run db:init
+npm.cmd start
 ```
 
-Then create the admin and run `npm.cmd start` as above. MySQL data survives container restarts in the `school_mysql_data` Docker volume. Back up that volume before moving or deleting it.
+Open `http://localhost:3001`. The SQLite database and `enquiries` table are created automatically at `data/enquiries.sqlite`. The initial admin account is created on first startup using the email and password hash from the ignored `.env` file.
 
-## Backend features
+The **School Admin Panel** is at `http://localhost:3001/admin`. Sign in with `mummaproud2003@gmail.com` and the password you set in step 2. Use the separate Notices, Activities, and Gallery sections to add, edit, and delete content; changes are written directly to `data/site-content.json` and appear on the corresponding public pages. Images can use a website image path or an HTTPS image URL. The Enquiries section displays the latest 500 admission enquiries from the private SQLite database. Do not expose the panel on a public network without HTTPS and a strong, private admin password.
 
-- Dedicated responsive admission enquiry page; validated submissions are stored in MySQL.
-- Admin sign-in with bcrypt password hashes, rate-limited login, database-backed sessions, secure HTTP-only cookies, and CSRF/origin checks.
-- Signed-in admins can change their login email and/or password after confirming their current password; password changes require at least 12 characters.
-- Dedicated admin pages to review up to 200 recent enquiries and mark them new, contacted, or closed; publish, prioritize, expire, and delete notices; manage gallery photos; and add or delete activities.
-- Gallery uploads and deletion; the homepage preview links to a dedicated full gallery page. Image files are checked, resized/encoded as WebP, and size-limited.
-- Current notices appear on the homepage and dedicated notices page. Activities appear on the homepage and dedicated activities page.
-- Public gallery, activities, and notice contents are loaded from the database. Run `npm.cmd run db:init` after updating the app to create new tables and seed the initial activities.
-- Security headers, prepared SQL statements, upload and enquiry limits, and errors surfaced to users. Only explicitly public pages and assets are served from the project root; application and database files are not exposed.
+## Production deployment
 
-Keep `.env`, database backups, and the `uploads` directory private. Do not commit passwords, session secrets, or production data. In production, serve the site over HTTPS, set `NODE_ENV=production`, and use a dedicated MySQL account with only the permissions this application needs. If a trusted single reverse proxy terminates HTTPS, also set `TRUST_PROXY=1` and configure that proxy to overwrite forwarded headers.
+This app is ready to deploy on a host that supports Node.js 22.13+, a long-running Node process, and persistent writable storage. It is not a static-only site: admin login, enquiries, and website content require the server and the files in the `data` directory to remain available.
 
-## Before a public launch
+Before publishing:
 
-- Deploy behind HTTPS with `NODE_ENV=production`; set `TRUST_PROXY=1` only when HTTPS terminates at a trusted reverse proxy.
-- Replace local development credentials with a dedicated, least-privilege production database account. Keep MySQL private; the Docker Compose port is bound to localhost.
-- Use a unique administrator password that has not been shared in chats or reused elsewhere, and keep production secrets out of source control.
-- Publish a privacy notice that explains how admission enquiries, including children's and guardians' personal information, are used, retained, and deleted. Confirm the school's consent and data-handling requirements before collecting real enquiries.
-- Back up and test restoring both the MySQL database and `uploads`; ensure the production host provides persistent storage for both.
-- Configure the real public domain before adding canonical URLs and an absolute-URL sitemap. These cannot be generated accurately from the local development address.
+1. Set `NODE_ENV=production`, a supported Node.js version, and the host-provided `PORT`.
+2. Put the app behind an HTTPS reverse proxy/load balancer. Set `TRUST_PROXY_HOPS` to the exact number of trusted proxy hops so secure cookies and client IP rate limits work correctly. Do not trust a proxy that users can bypass.
+3. Generate `SESSION_SECRET` from at least 48 cryptographically random bytes and keep it private. For example, in PowerShell: `node -p "require('node:crypto').randomBytes(48).toString('base64')"`.
+4. Before the first start on a new database, set `ADMIN_EMAIL` and `ADMIN_PASSWORD_HASH` in the host's secret settings. Generate the hash by running `scripts/hash-admin-password.js` with `ADMIN_BOOTSTRAP_PASSWORD` set temporarily; remove the plaintext bootstrap value afterwards. For an existing admin database, set a strong unique password using the reset instructions above. Do not use the development values in `.env.example`; use the production HTTPS site origin if `ADMIN_ALLOWED_ORIGINS` is needed.
+5. Mount persistent storage for both `data/enquiries.sqlite` and `data/site-content.json`. If the host uses a separate volume, set `ENQUIRY_DB_PATH` and `SITE_CONTENT_PATH` to paths on that volume. Back up the database securely and keep both files private.
+6. Start with `npm ci` and `npm start`; verify `/api/health`, the public pages, the admission form, and `/admin` over HTTPS.
+
+Do not publish the admin panel or receive real child enquiries until HTTPS, persistent storage, and the production admin credentials have been configured and verified.
+
+To submit an enquiry, open `http://localhost:3001/admission.html`. The form validates child and guardian names, phone, optional email, class, address, and a six-digit PIN code before storing the enquiry with its submission time. Requests are limited to five per IP address per 15 minutes.
+
+In VS Code, you can run the **Start school website backend** task and preview the site with Live Server at `http://127.0.0.1:3000`. The workspace proxies the site and enquiry requests to the Node.js server on port 3001; reload the VS Code window once after changing workspace proxy settings.
+
+The initial password was provided in chat, so replace it with a new, unique password before exposing the site to other people. Reset it at any time with:
+
+```powershell
+$secure = Read-Host "New admin password (12+ characters)" -AsSecureString
+$pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+try {
+    $env:ADMIN_BOOTSTRAP_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+    npm.cmd run admin:reset
+} finally {
+    Remove-Item Env:ADMIN_BOOTSTRAP_PASSWORD -ErrorAction SilentlyContinue
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+    $secure.Dispose()
+}
+```
+
+Password resets invalidate active admin sessions. Do not commit `.env`, the SQLite file, or enquiry records.
+
+## Data and privacy
+
+Back up `data/enquiries.sqlite` securely. Admission forms can contain children's and guardians' personal information; restrict access to the database, set an appropriate retention period, and do not commit or publicly distribute enquiry records. Website content is stored separately in `data/site-content.json`. Set `ENQUIRY_DB_PATH` to use another private persistent database path.

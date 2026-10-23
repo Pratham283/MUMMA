@@ -3,93 +3,91 @@ require("dotenv").config();
 const crypto = require("node:crypto");
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const { promisify } = require("node:util");
 const express = require("express");
-const session = require("express-session");
-const MySQLStoreFactory = require("express-mysql-session");
-const mysql = require("mysql2/promise");
-const bcrypt = require("bcryptjs");
+const { DatabaseSync } = require("node:sqlite");
 const helmet = require("helmet");
-const multer = require("multer");
-const sharp = require("sharp");
 const { rateLimit } = require("express-rate-limit");
+const scrypt = promisify(crypto.scrypt);
 
 const app = express();
 const rootDirectory = __dirname;
-const uploadDirectory = path.join(rootDirectory, "uploads");
+const dataDirectory = path.join(rootDirectory, "data");
+const databasePath = process.env.ENQUIRY_DB_PATH || path.join(dataDirectory, "enquiries.sqlite");
+const siteContentPath = process.env.SITE_CONTENT_PATH || path.join(dataDirectory, "site-content.json");
 const port = Number(process.env.PORT) || 3001;
+const maxRequestBytes = 256 * 1024;
+const sessionLifetime = 60 * 60 * 1000;
 const sessionSecret = process.env.SESSION_SECRET;
-const databaseName = process.env.DB_NAME || "mummas_proud_school";
+const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+const bootstrapAdminPasswordHash = process.env.ADMIN_PASSWORD_HASH;
+const trustProxyHops = process.env.TRUST_PROXY_HOPS;
+
+const publicFiles = new Set([
+    "activities.html",
+    "activity-finger-painting.jpeg",
+    "activity-mystery-box.jpeg",
+    "activity-table-manners.jpeg",
+    "admin.css",
+    "admin.html",
+    "admin.js",
+    "admission.html",
+    "founder-harshita.jpeg",
+    "founder-pankaj.jpeg",
+    "gallery.html",
+    "index.html",
+    "logo.png",
+    "notices.html",
+    "robots.txt",
+    "school-building.jpeg",
+    "script.js",
+    "style.css",
+]);
 
 if (!sessionSecret || sessionSecret.length < 32 || sessionSecret.startsWith("replace-this")) {
-    throw new Error("Set SESSION_SECRET in .env to a unique random value of at least 32 characters.");
+    throw new Error("Set SESSION_SECRET to a unique random secret of at least 32 characters.");
 }
-
-if (!/^[a-zA-Z0-9_]+$/.test(databaseName)) {
-    throw new Error("DB_NAME may contain only letters, numbers, and underscores.");
+if (process.env.NODE_ENV === "production") {
+    if (sessionSecret.length < 64 || new Set(sessionSecret).size < 16) {
+        throw new Error("Production SESSION_SECRET must be generated from at least 48 random bytes.");
+    }
+    if (!/^[1-9]\d*$/.test(trustProxyHops || "")) {
+        throw new Error("Set TRUST_PROXY_HOPS to the exact positive number of trusted HTTPS proxy hops.");
+    }
+    const trustedProxyCount = Number(trustProxyHops);
+    if (!Number.isSafeInteger(trustedProxyCount)) {
+        throw new Error("TRUST_PROXY_HOPS must be a safe positive integer.");
+    }
+    app.set("trust proxy", trustedProxyCount);
+} else if (trustProxyHops) {
+    if (!/^[1-9]\d*$/.test(trustProxyHops)) {
+        throw new Error("TRUST_PROXY_HOPS must be a positive integer.");
+    }
+    app.set("trust proxy", Number(trustProxyHops));
 }
-
-if (process.env.TRUST_PROXY === "1") {
-    app.set("trust proxy", 1);
-}
-
-const pool = mysql.createPool({
-    host: process.env.DB_HOST || "127.0.0.1",
-    port: Number(process.env.DB_PORT) || 3306,
-    user: process.env.DB_USER || "root",
-    password: process.env.DB_PASSWORD || "",
-    database: databaseName,
-    charset: "utf8mb4",
-    timezone: "+00:00",
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0,
-    ...(process.env.DB_SOCKET ? { socketPath: process.env.DB_SOCKET } : {}),
-    ...(process.env.DB_SSL_CA ? { ssl: { ca: process.env.DB_SSL_CA } } : {}),
-});
-
-const MySQLStore = MySQLStoreFactory(session);
-const sessionStore = new MySQLStore({
-    clearExpired: true,
-    checkExpirationInterval: 15 * 60 * 1000,
-    expiration: 60 * 60 * 1000,
-    createDatabaseTable: true,
-    schema: {
-        tableName: "admin_sessions",
-    },
-}, pool);
-
-const upload = multer({
-    storage: multer.memoryStorage(),
-    limits: {
-        fileSize: 8 * 1024 * 1024,
-        files: 1,
-    },
-});
 
 app.disable("x-powered-by");
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
-            ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-            "img-src": ["'self'", "data:"],
+            imgSrc: ["'self'", "data:", "https:"],
         },
     },
 }));
-app.use(express.json({ limit: "20kb" }));
-app.use(session({
-    name: "school_admin",
-    secret: sessionSecret,
-    store: sessionStore,
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-        httpOnly: true,
-        maxAge: 60 * 60 * 1000,
-        sameSite: "strict",
-        secure: process.env.NODE_ENV === "production",
-    },
-}));
+app.use(express.json({ limit: maxRequestBytes, strict: true }));
 
+let database;
+let insertEnquiry;
+let dummyPasswordHash;
+let findAdminByEmail;
+let findAdminById;
+let findAdminSession;
+let insertAdminSession;
+let listEnquiries;
+let deleteAdminSession;
+let deleteExpiredSessions;
+let siteContent;
+let contentWriteQueue = Promise.resolve();
 const enquiryRateLimit = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 5,
@@ -97,7 +95,6 @@ const enquiryRateLimit = rateLimit({
     legacyHeaders: false,
     message: { error: "Too many enquiries. Please try again in a little while." },
 });
-
 const loginRateLimit = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 10,
@@ -105,591 +102,445 @@ const loginRateLimit = rateLimit({
     legacyHeaders: false,
     message: { error: "Too many sign-in attempts. Please try again later." },
 });
+const csrfRateLimit = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 30,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    message: { error: "Too many admin session requests. Please try again later." },
+});
 
-function validateAdminRequest(req, res, next) {
-    if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
-        return next();
+const enquiryStatement = `
+    INSERT INTO enquiries (
+        student_name, parent_name, phone, email, grade, address, pin_code, message
+    ) VALUES (
+        @studentName, @parentName, @phone, @email, @grade, @address, @pinCode, @message
+    )
+`;
+
+const defaultSiteContent = {
+    notices: [],
+    activities: [
+        {
+            id: "table-manners",
+            title: "Table Manners",
+            category: "Everyday life skills",
+            description: "Children practise polite mealtime habits, sharing, and using tableware with care—building independence and respect for others.",
+            image: "/activity-table-manners.jpeg",
+            alt: "Children practising table manners together at school",
+        },
+        {
+            id: "mystery-box",
+            title: "Mystery Box",
+            category: "Curiosity & discovery",
+            description: "Guessing what is inside encourages children to observe, describe what they notice, ask questions, and express their ideas with confidence.",
+            image: "/activity-mystery-box.jpeg",
+            alt: "Children exploring a mystery learning box with their teacher",
+        },
+        {
+            id: "finger-activity",
+            title: "Finger Activity",
+            category: "Creative exploration",
+            description: "Hands-on finger activities help little learners practise fine motor control and hand–eye coordination while exploring colour, texture, and creativity.",
+            image: "/activity-finger-painting.jpeg",
+            alt: "Children taking part in a colourful finger activity",
+        },
+    ],
+    gallery: [
+        {
+            id: "school",
+            title: "A happy place to grow",
+            caption: "Welcome to our school",
+            image: "/school-building.jpeg",
+            alt: "The Mumma's Proud Junior Wing School building",
+        },
+        {
+            id: "table-manners",
+            title: "Table manners",
+            caption: "Everyday life skills",
+            image: "/activity-table-manners.jpeg",
+            alt: "Children learning table manners together at school",
+        },
+        {
+            id: "mystery-box",
+            title: "Mystery box",
+            caption: "Curiosity in action",
+            image: "/activity-mystery-box.jpeg",
+            alt: "Children discovering objects in a mystery learning box",
+        },
+        {
+            id: "finger-activity",
+            title: "Finger activity",
+            caption: "Learning by creating",
+            image: "/activity-finger-painting.jpeg",
+            alt: "Young children sharing their work during a finger activity",
+        },
+        {
+            id: "republic-day",
+            title: "Republic Day",
+            caption: "School celebration",
+            image: "/founder-harshita.jpeg",
+            alt: "A teacher at the school's Republic Day celebration",
+        },
+    ],
+};
+
+const contentSections = new Set(["notices", "activities", "gallery"]);
+
+function validateContentItems(section, items) {
+    if (!contentSections.has(section) || !Array.isArray(items) || items.length > 100) {
+        return { error: "The content submitted is not valid." };
     }
 
+    const ids = new Set();
+    const content = [];
+    for (const item of items) {
+        if (!item || typeof item !== "object" || Array.isArray(item) ||
+            typeof item.id !== "string" || !/^[a-z0-9-]{1,80}$/i.test(item.id) || ids.has(item.id)) {
+            return { error: "Each content item must have a unique valid ID." };
+        }
+        ids.add(item.id);
+        const text = (key, maximum, required = true) => {
+            if (typeof item[key] !== "string") {
+                return null;
+            }
+            const value = item[key].trim();
+            return value && value.length <= maximum ? value : (!required && !value ? "" : null);
+        };
+
+        let validated;
+        if (section === "notices") {
+            const title = text("title", 120);
+            const body = text("body", 2000);
+            const date = text("date", 10);
+            const priority = item.priority;
+            const parsedDate = date ? new Date(`${date}T00:00:00Z`) : null;
+            if (!title || !body || !date || !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+                !parsedDate || Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== date ||
+                !["normal", "important", "urgent"].includes(priority)) {
+                return { error: "Check each notice title, message, date, and priority." };
+            }
+            validated = { id: item.id, title, body, date, priority };
+        } else {
+            const title = text("title", 100);
+            const captionOrCategory = text(section === "activities" ? "category" : "caption", 120);
+            const image = text("image", 2048);
+            const alt = text("alt", 250, false);
+            let isHttpsImage = false;
+            if (image?.startsWith("https://")) {
+                try {
+                    const imageUrl = new URL(image);
+                    isHttpsImage = imageUrl.protocol === "https:" && !imageUrl.username && !imageUrl.password;
+                } catch {
+                    isHttpsImage = false;
+                }
+            }
+            const isLocalImage = image && /^\/[A-Za-z0-9][A-Za-z0-9._-]*\.(?:jpe?g|png|webp)$/i.test(image);
+            if (!title || !captionOrCategory || !image || alt === null || (!isLocalImage && !isHttpsImage)) {
+                return { error: "Check each item title, caption/category, and secure image URL." };
+            }
+            if (section === "activities") {
+                const description = text("description", 1500);
+                if (!description) {
+                    return { error: "Each activity needs a description." };
+                }
+                validated = { id: item.id, title, category: captionOrCategory, description, image, alt };
+            } else {
+                validated = { id: item.id, title, caption: captionOrCategory, image, alt };
+            }
+        }
+        content.push(validated);
+    }
+    return { content };
+}
+
+function saveContentSection(section, items) {
+    const save = async () => {
+        const updatedContent = { ...siteContent, [section]: items };
+        const temporaryPath = `${siteContentPath}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
+        await fs.writeFile(temporaryPath, `${JSON.stringify(updatedContent, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+        await fs.rename(temporaryPath, siteContentPath);
+        siteContent = updatedContent;
+        return siteContent;
+    };
+    const pendingSave = contentWriteQueue.then(save);
+    contentWriteQueue = pendingSave.catch(() => {});
+    return pendingSave;
+}
+
+function validateEnquiry(body) {
+    const enquiry = {
+        studentName: typeof body.studentName === "string" ? body.studentName.trim() : "",
+        parentName: typeof body.parentName === "string" ? body.parentName.trim() : "",
+        phone: typeof body.phone === "string" ? body.phone.trim() : "",
+        email: typeof body.email === "string" ? body.email.trim().toLowerCase() : "",
+        grade: typeof body.grade === "string" ? body.grade.trim() : "",
+        address: typeof body.address === "string" ? body.address.trim() : "",
+        pinCode: typeof body.pinCode === "string" ? body.pinCode.trim() : "",
+        message: typeof body.message === "string" ? body.message.trim() : "",
+    };
+
+    if (!enquiry.studentName || enquiry.studentName.length > 100) {
+        return { error: "Enter the student's name (up to 100 characters)." };
+    }
+    if (!enquiry.parentName || enquiry.parentName.length > 100) {
+        return { error: "Enter a parent or guardian name (up to 100 characters)." };
+    }
+    if (!/^\+?[0-9\s()-]{7,25}$/.test(enquiry.phone)) {
+        return { error: "Enter a valid phone number." };
+    }
+    if (enquiry.email.length > 254 || (enquiry.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(enquiry.email))) {
+        return { error: "Enter a valid email address, or leave it blank." };
+    }
+    if (!["Playgroup", "Nursery", "LKG", "UKG", "Kindergarten", "Class 1–5"].includes(enquiry.grade)) {
+        return { error: "Choose a valid class of interest." };
+    }
+    if (!enquiry.address || enquiry.address.length > 300) {
+        return { error: "Enter an address (up to 300 characters)." };
+    }
+    if (!/^[0-9]{6}$/.test(enquiry.pinCode)) {
+        return { error: "Enter a valid 6-digit PIN code." };
+    }
+    if (enquiry.message.length > 2000) {
+        return { error: "Keep your message under 2,000 characters." };
+    }
+    return { enquiry };
+}
+
+function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
+    return scrypt(password, salt, 64).then((hash) => `scrypt$${salt}$${hash.toString("hex")}`);
+}
+
+async function verifyPassword(password, encodedHash) {
+    const [algorithm, salt, expectedHex] = encodedHash.split("$");
+    if (algorithm !== "scrypt" || !/^[a-f0-9]{32}$/.test(salt) || !/^[a-f0-9]{128}$/.test(expectedHex)) {
+        return false;
+    }
+    const actual = await scrypt(password, salt, 64);
+    const expected = Buffer.from(expectedHex, "hex");
+    return crypto.timingSafeEqual(actual, expected);
+}
+
+function signSessionId(sessionId) {
+    return crypto.createHmac("sha256", sessionSecret).update(sessionId).digest("hex");
+}
+
+function safeEqual(left, right) {
+    if (typeof left !== "string" || typeof right !== "string") {
+        return false;
+    }
+    const leftBuffer = Buffer.from(left);
+    const rightBuffer = Buffer.from(right);
+    return leftBuffer.length === rightBuffer.length && crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function sessionCookieOptions() {
+    return {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        path: "/",
+        maxAge: sessionLifetime,
+    };
+}
+
+function readSessionCookie(req) {
+    const cookie = req.headers.cookie?.split(";").map((part) => part.trim())
+        .find((part) => part.startsWith("school_admin="));
+    if (!cookie) {
+        return null;
+    }
+
+    const value = cookie.slice("school_admin=".length);
+    const separator = value.lastIndexOf(".");
+    if (separator < 1) {
+        return null;
+    }
+    const sessionId = value.slice(0, separator);
+    const signature = value.slice(separator + 1);
+    if (!/^[a-f0-9]{64}$/.test(sessionId) || !safeEqual(signature, signSessionId(sessionId))) {
+        return null;
+    }
+    return sessionId;
+}
+
+function setSessionCookie(res, sessionId) {
+    res.cookie("school_admin", `${sessionId}.${signSessionId(sessionId)}`, sessionCookieOptions());
+}
+
+function clearSessionCookie(res) {
+    res.clearCookie("school_admin", { ...sessionCookieOptions(), maxAge: undefined });
+}
+
+function createSession(adminId = null) {
+    const sessionId = crypto.randomBytes(32).toString("hex");
+    const csrfToken = crypto.randomBytes(32).toString("hex");
+    insertAdminSession.run({
+        sessionId,
+        adminId,
+        csrfToken,
+        expiresAt: Date.now() + sessionLifetime,
+    });
+    return { sessionId, csrfToken };
+}
+
+function loadAdminSession(req, res, next) {
+    const sessionId = readSessionCookie(req);
+    req.adminSession = sessionId ? findAdminSession.get(sessionId, Date.now()) || null : null;
+    if (req.adminSession) {
+        res.cookie("school_admin", `${sessionId}.${signSessionId(sessionId)}`, sessionCookieOptions());
+    }
+    next();
+}
+
+function validateAdminMutation(req, res, next) {
     const origin = req.get("origin");
     const expectedOrigin = `${req.protocol}://${req.get("host")}`;
-
-    if (!origin || origin !== expectedOrigin) {
+    const configuredOrigins = (process.env.ADMIN_ALLOWED_ORIGINS || "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
+    if (!origin || (origin !== expectedOrigin && !configuredOrigins.includes(origin))) {
         return res.status(403).json({ error: "This request is not allowed." });
     }
-
-    const token = req.get("x-csrf-token");
-    const expectedToken = req.session.csrfToken;
-    if (
-        typeof token !== "string" ||
-        typeof expectedToken !== "string" ||
-        token.length !== expectedToken.length ||
-        !crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expectedToken))
-    ) {
+    if (!req.adminSession || !safeEqual(req.get("x-csrf-token"), req.adminSession.csrf_token)) {
         return res.status(403).json({ error: "Your session expired. Refresh the page and try again." });
     }
-
     next();
 }
 
 function requireAdmin(req, res, next) {
-    if (!req.session.adminId) {
+    if (!req.adminSession?.admin_id) {
+        return res.status(401).json({ error: "Please sign in to view enquiries." });
+    }
+    req.admin = findAdminById.get(req.adminSession.admin_id);
+    if (!req.admin) {
         return res.status(401).json({ error: "Please sign in to continue." });
     }
-
     next();
 }
 
-function sendSessionError(res, error) {
-    console.error("Session store error:", error.message);
-    res.status(503).json({ error: "The sign-in service is temporarily unavailable." });
-}
+app.use("/api/admin", loadAdminSession);
 
-app.get("/api/health", async (req, res, next) => {
-    try {
-        await pool.query("SELECT 1");
-        res.json({ status: "ok" });
-    } catch (error) {
-        next(error);
-    }
+app.get("/api/health", (req, res) => {
+    database.prepare("SELECT 1").get();
+    res.json({ status: "ok" });
 });
 
-const adminPages = new Map([
-    ["/admin", "admin.html"],
-    ["/admin/notices", "admin.html"],
-    ["/admin/memories", "admin-memories.html"],
-    ["/admin/activities", "admin-activities.html"],
-    ["/admin/enquiries", "admin-enquiries.html"],
-]);
-
-app.get([...adminPages.keys()], (req, res) => {
-    const page = adminPages.get(req.path.replace(/\/+$/, ""));
-    res.sendFile(path.join(rootDirectory, page));
+app.get("/api/content", (req, res) => {
+    res.set("Cache-Control", "no-store");
+    res.json(siteContent);
 });
 
-app.get("/gallery", (req, res) => {
-    res.sendFile(path.join(rootDirectory, "gallery.html"));
-});
-
-app.get("/api/gallery", async (req, res, next) => {
-    const limit = Number(req.query.limit);
-    const parameters = [];
-    let limitClause = "";
-
-    if (Number.isInteger(limit) && limit > 0 && limit <= 30) {
-        limitClause = " LIMIT ?";
-        parameters.push(limit);
+app.post("/api/enquiries", enquiryRateLimit, (req, res, next) => {
+    const { enquiry, error } = validateEnquiry(req.body || {});
+    if (error) {
+        return res.status(400).json({ error });
     }
 
     try {
-        const [images] = await pool.execute(
-            `SELECT id, title, caption, image_path AS imagePath
-             FROM gallery_images ORDER BY sort_order, created_at DESC, id DESC${limitClause}`,
-            parameters
-        );
-        res.json({ images });
-    } catch (error) {
-        next(error);
+        const result = insertEnquiry.run({
+            ...enquiry,
+            email: enquiry.email || null,
+        });
+        res.status(201).json({
+            message: "Thank you! Your admission enquiry has been received.",
+            id: Number(result.lastInsertRowid),
+        });
+    } catch (databaseError) {
+        next(databaseError);
     }
 });
 
-app.get("/api/activities", async (req, res, next) => {
-    try {
-        const [activities] = await pool.execute(
-            `SELECT id, title, category, description, image_path AS imagePath
-             FROM activities ORDER BY sort_order, created_at, id`
-        );
-        res.json({ activities });
-    } catch (error) {
-        next(error);
+app.get("/api/admin/csrf", csrfRateLimit, (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!req.adminSession) {
+        deleteExpiredSessions.run(Date.now());
+        const created = createSession();
+        setSessionCookie(res, created.sessionId);
+        return res.json({ csrfToken: created.csrfToken });
     }
-});
-
-app.get("/api/notices", async (req, res, next) => {
-    const limit = Number(req.query.limit);
-    const parameters = [];
-    let limitClause = "";
-
-    if (Number.isInteger(limit) && limit > 0 && limit <= 20) {
-        limitClause = " LIMIT ?";
-        parameters.push(limit);
-    }
-
-    try {
-        const [notices] = await pool.execute(
-            `SELECT id, title, body, priority, published_at AS publishedAt, expires_at AS expiresAt
-             FROM notices
-             WHERE published_at <= CURRENT_TIMESTAMP AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
-             ORDER BY FIELD(priority, 'urgent', 'important', 'normal'), published_at DESC, id DESC${limitClause}`,
-            parameters
-        );
-        res.json({ notices });
-    } catch (error) {
-        next(error);
-    }
-});
-
-app.post("/api/enquiries", enquiryRateLimit, async (req, res, next) => {
-    const { studentName, parentName, phone, email, grade, message } = req.body || {};
-    const enquiry = {
-        studentName: typeof studentName === "string" ? studentName.trim() : "",
-        parentName: typeof parentName === "string" ? parentName.trim() : "",
-        phone: typeof phone === "string" ? phone.trim() : "",
-        email: typeof email === "string" ? email.trim().toLowerCase() : "",
-        grade: typeof grade === "string" ? grade.trim() : "",
-        message: typeof message === "string" ? message.trim() : "",
-    };
-
-    if (!enquiry.studentName || enquiry.studentName.length > 100) {
-        return res.status(400).json({ error: "Enter the student's name (up to 100 characters)." });
-    }
-    if (!enquiry.parentName || enquiry.parentName.length > 100) {
-        return res.status(400).json({ error: "Enter a parent or guardian name (up to 100 characters)." });
-    }
-    if (!/^\+?[0-9\s()-]{7,25}$/.test(enquiry.phone)) {
-        return res.status(400).json({ error: "Enter a valid phone number." });
-    }
-    if (enquiry.email.length > 254 || (enquiry.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(enquiry.email))) {
-        return res.status(400).json({ error: "Enter a valid email address, or leave it blank." });
-    }
-    if (!enquiry.grade || enquiry.grade.length > 50) {
-        return res.status(400).json({ error: "Select or enter a class (up to 50 characters)." });
-    }
-    if (enquiry.message.length > 2000) {
-        return res.status(400).json({ error: "Keep your message under 2,000 characters." });
-    }
-
-    try {
-        const [result] = await pool.execute(
-            `INSERT INTO enquiries (student_name, parent_name, phone, email, grade, message)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [
-                enquiry.studentName,
-                enquiry.parentName,
-                enquiry.phone,
-                enquiry.email || null,
-                enquiry.grade,
-                enquiry.message,
-            ]
-        );
-        res.status(201).json({ message: "Thank you! Your admission enquiry has been received.", id: result.insertId });
-    } catch (error) {
-        next(error);
-    }
-});
-
-app.get("/api/admin/csrf", (req, res, next) => {
-    req.session.csrfToken ||= crypto.randomBytes(32).toString("hex");
-    req.session.save((error) => {
-        if (error) {
-            return sendSessionError(res, error);
-        }
-        res.json({ csrfToken: req.session.csrfToken });
-    });
+    res.json({ csrfToken: req.adminSession.csrf_token });
 });
 
 app.get("/api/admin/me", (req, res) => {
-    if (!req.session.adminId) {
+    if (!req.adminSession?.admin_id) {
         return res.json({ admin: null });
     }
-    res.json({ admin: { email: req.session.adminEmail } });
+    const admin = findAdminById.get(req.adminSession.admin_id);
+    res.json({ admin: admin ? { email: admin.email } : null });
 });
 
-app.post("/api/admin/login", loginRateLimit, validateAdminRequest, async (req, res, next) => {
+app.post("/api/admin/login", loginRateLimit, validateAdminMutation, async (req, res, next) => {
     const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
     const password = typeof req.body?.password === "string" ? req.body.password : "";
-
-    if (!email || !password) {
+    if (!email || !password || email.length > 254 || password.length > 256) {
         return res.status(400).json({ error: "Enter your email and password." });
     }
 
     try {
-        const [admins] = await pool.execute(
-            "SELECT id, email, password_hash FROM admins WHERE email = ? LIMIT 1",
-            [email]
-        );
-        const admin = admins[0];
-        const validPassword = admin
-            ? await bcrypt.compare(password, admin.password_hash)
-            : await bcrypt.compare(password, "$2a$12$wR9nr0dEhLxMJM3JwHMOzeYuxS7fW5jN2gxlz2nB5X1ZFK2AM8JfK");
-
-        if (!admin || !validPassword) {
+        const admin = findAdminByEmail.get(email);
+        const passwordIsValid = await verifyPassword(password, admin?.password_hash || dummyPasswordHash);
+        if (!admin || !passwordIsValid) {
             return res.status(401).json({ error: "Email or password is incorrect." });
         }
 
-        req.session.regenerate((error) => {
-            if (error) {
-                return sendSessionError(res, error);
-            }
-
-            req.session.adminId = admin.id;
-            req.session.adminEmail = admin.email;
-            req.session.csrfToken = crypto.randomBytes(32).toString("hex");
-            req.session.save((saveError) => {
-                if (saveError) {
-                    return sendSessionError(res, saveError);
-                }
-                res.json({
-                    admin: { email: admin.email },
-                    csrfToken: req.session.csrfToken,
-                });
-            });
-        });
+        deleteAdminSession.run(req.adminSession.session_id);
+        const created = createSession(admin.id);
+        setSessionCookie(res, created.sessionId);
+        res.json({ admin: { email: admin.email }, csrfToken: created.csrfToken });
     } catch (error) {
         next(error);
     }
 });
 
-app.post("/api/admin/logout", validateAdminRequest, requireAdmin, (req, res) => {
-    req.session.destroy((error) => {
-        if (error) {
-            return sendSessionError(res, error);
-        }
-        res.clearCookie("school_admin", {
-            httpOnly: true,
-            sameSite: "strict",
-            secure: process.env.NODE_ENV === "production",
-        });
-        res.json({ message: "You have been signed out." });
+app.post("/api/admin/logout", validateAdminMutation, requireAdmin, (req, res) => {
+    deleteAdminSession.run(req.adminSession.session_id);
+    clearSessionCookie(res);
+    res.json({ message: "You have been signed out." });
+});
+
+app.get("/api/admin/enquiries", requireAdmin, (req, res) => {
+    res.json({
+        enquiries: listEnquiries.all(),
+        admin: { email: req.admin.email },
     });
 });
 
-app.use("/api/admin", validateAdminRequest, requireAdmin);
+app.use("/api/admin", (req, res, next) => {
+    if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
+        return next();
+    }
+    validateAdminMutation(req, res, next);
+});
 
-app.get("/api/admin/dashboard", async (req, res, next) => {
+app.put("/api/admin/content/:section", requireAdmin, async (req, res, next) => {
+    const section = req.params.section;
+    const { content, error } = validateContentItems(section, req.body?.items);
+    if (error) {
+        return res.status(400).json({ error });
+    }
     try {
-        const [[images], [activities], [enquiries], [notices]] = await Promise.all([
-            pool.execute(
-                "SELECT id, title, caption, image_path AS imagePath, created_at AS createdAt FROM gallery_images ORDER BY sort_order, created_at DESC, id DESC"
-            ),
-            pool.execute(
-                "SELECT id, title, category, description, image_path AS imagePath FROM activities ORDER BY sort_order, created_at, id"
-            ),
-            pool.execute(
-                `SELECT id, student_name AS studentName, parent_name AS parentName, phone, email,
-                        grade, message, status, created_at AS createdAt
-                 FROM enquiries ORDER BY created_at DESC LIMIT 200`
-            ),
-            pool.execute(
-                `SELECT id, title, body, priority, published_at AS publishedAt, expires_at AS expiresAt
-                 FROM notices ORDER BY published_at DESC, id DESC LIMIT 100`
-            ),
-        ]);
-        res.json({ images, activities, enquiries, notices });
-    } catch (error) {
-        next(error);
+        const updatedContent = await saveContentSection(section, content);
+        res.json({ items: updatedContent[section], message: "Changes saved and published." });
+    } catch (saveError) {
+        next(saveError);
     }
 });
 
-app.post("/api/admin/notices", async (req, res, next) => {
-    const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
-    const body = typeof req.body?.body === "string" ? req.body.body.trim() : "";
-    const priority = req.body?.priority;
-    const expiresAtValue = typeof req.body?.expiresAt === "string" ? req.body.expiresAt.trim() : "";
-
-    if (!title || title.length > 160) {
-        return res.status(400).json({ error: "Enter a notice title (up to 160 characters)." });
-    }
-    if (!body || body.length > 5000) {
-        return res.status(400).json({ error: "Enter notice details (up to 5,000 characters)." });
-    }
-    if (!["normal", "important", "urgent"].includes(priority)) {
-        return res.status(400).json({ error: "Choose a valid notice priority." });
-    }
-
-    let expiresAt = null;
-    if (expiresAtValue) {
-        const localDateTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
-        const isoDateTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/;
-        if (!localDateTime.test(expiresAtValue) && !isoDateTime.test(expiresAtValue)) {
-            return res.status(400).json({ error: "Enter a valid notice expiry date and time." });
-        }
-        const parsedDate = new Date(expiresAtValue);
-        if (Number.isNaN(parsedDate.getTime()) || parsedDate <= new Date()) {
-            return res.status(400).json({ error: "The notice expiry must be a future date and time." });
-        }
-        expiresAt = parsedDate;
-    }
-
-    try {
-        const [result] = await pool.execute(
-            "INSERT INTO notices (title, body, priority, expires_at) VALUES (?, ?, ?, ?)",
-            [title, body, priority, expiresAt]
-        );
-        res.status(201).json({
-            notice: {
-                id: result.insertId,
-                title,
-                body,
-                priority,
-                publishedAt: new Date(),
-                expiresAt,
-            },
-        });
-    } catch (error) {
-        next(error);
-    }
+app.get("/", (req, res) => {
+    res.sendFile(path.join(rootDirectory, "index.html"));
 });
 
-app.delete("/api/admin/notices/:id", async (req, res, next) => {
-    if (!/^\d+$/.test(req.params.id)) {
-        return res.status(400).json({ error: "Invalid notice." });
-    }
-
-    try {
-        const [result] = await pool.execute("DELETE FROM notices WHERE id = ?", [req.params.id]);
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ error: "Notice not found." });
-        }
-        res.json({ message: "Notice deleted." });
-    } catch (error) {
-        next(error);
-    }
+app.get("/admin", (req, res) => {
+    res.sendFile(path.join(rootDirectory, "admin.html"));
 });
 
-app.post("/api/admin/gallery", upload.single("image"), async (req, res, next) => {
-    const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
-    const caption = typeof req.body?.caption === "string" ? req.body.caption.trim() : "";
-
-    if (!title || title.length > 120 || caption.length > 180) {
-        return res.status(400).json({ error: "A title is required (up to 120 characters); captions can be up to 180 characters." });
+app.get("/:file", (req, res, next) => {
+    if (!publicFiles.has(req.params.file)) {
+        return next();
     }
-    if (!req.file) {
-        return res.status(400).json({ error: "Choose a JPEG, PNG, or WebP image to upload." });
-    }
-
-    const imageName = `${crypto.randomUUID()}.webp`;
-    const imagePath = path.join(uploadDirectory, imageName);
-
-    try {
-        const imageOptions = { limitInputPixels: 40000000 };
-        const metadata = await sharp(req.file.buffer, imageOptions).metadata();
-        if (!["jpeg", "png", "webp"].includes(metadata.format)) {
-            return res.status(400).json({ error: "Only JPEG, PNG, and WebP images are supported." });
-        }
-    } catch {
-        return res.status(400).json({ error: "The selected file is not a supported image." });
-    }
-
-    try {
-        const encodedImage = await sharp(req.file.buffer, { limitInputPixels: 40000000 })
-            .rotate()
-            .webp({ quality: 84 })
-            .toBuffer();
-        const [latest] = await pool.execute("SELECT COALESCE(MAX(sort_order), -1) + 1 AS nextOrder FROM gallery_images");
-        await fs.mkdir(uploadDirectory, { recursive: true });
-        await fs.writeFile(imagePath, encodedImage, { flag: "wx" });
-
-        try {
-            const [result] = await pool.execute(
-                "INSERT INTO gallery_images (title, caption, image_path, sort_order) VALUES (?, ?, ?, ?)",
-                [title, caption, `/uploads/${imageName}`, latest[0].nextOrder]
-            );
-            res.status(201).json({
-                image: {
-                    id: result.insertId,
-                    title,
-                    caption,
-                    imagePath: `/uploads/${imageName}`,
-                },
-            });
-        } catch (error) {
-            await fs.unlink(imagePath).catch((unlinkError) => {
-                if (unlinkError.code !== "ENOENT") {
-                    console.error("Could not remove an unlisted gallery upload:", unlinkError.message);
-                }
-            });
-            throw error;
-        }
-    } catch (error) {
-        next(error);
-    }
-});
-
-app.delete("/api/admin/gallery/:id", async (req, res, next) => {
-    if (!/^\d+$/.test(req.params.id)) {
-        return res.status(400).json({ error: "Invalid gallery image." });
-    }
-
-    try {
-        const [images] = await pool.execute(
-            "SELECT image_path FROM gallery_images WHERE id = ? LIMIT 1",
-            [req.params.id]
-        );
-        if (images.length === 0) {
-            return res.status(404).json({ error: "Gallery image not found." });
-        }
-
-        await pool.execute("DELETE FROM gallery_images WHERE id = ?", [req.params.id]);
-        const imagePath = images[0].image_path;
-        if (imagePath.startsWith("/uploads/")) {
-            const imageName = path.basename(imagePath);
-            if (imageName === imagePath.slice("/uploads/".length)) {
-                try {
-                    await fs.unlink(path.join(uploadDirectory, imageName));
-                } catch (error) {
-                    if (error.code !== "ENOENT") {
-                        console.error("Could not remove deleted gallery upload:", error.message);
-                        return res.status(500).json({ error: "The image was removed from the gallery, but its file could not be cleaned up." });
-                    }
-                }
-            }
-        }
-        res.json({ message: "Gallery image deleted." });
-    } catch (error) {
-        next(error);
-    }
-});
-
-app.post("/api/admin/activities", upload.single("image"), async (req, res, next) => {
-    const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
-    const category = typeof req.body?.category === "string" ? req.body.category.trim() : "";
-    const description = typeof req.body?.description === "string" ? req.body.description.trim() : "";
-
-    if (!title || title.length > 120 || category.length > 80 || !description || description.length > 1200) {
-        return res.status(400).json({ error: "Enter an activity title (up to 120 characters), category (up to 80), and description (up to 1,200)." });
-    }
-    if (!req.file) {
-        return res.status(400).json({ error: "Choose a JPEG, PNG, or WebP activity photo." });
-    }
-
-    const imageOptions = { limitInputPixels: 40000000 };
-    let metadata;
-    try {
-        metadata = await sharp(req.file.buffer, imageOptions).metadata();
-    } catch {
-        return res.status(400).json({ error: "The selected file is not a supported image." });
-    }
-    if (!["jpeg", "png", "webp"].includes(metadata.format)) {
-        return res.status(400).json({ error: "Only JPEG, PNG, and WebP images are supported." });
-    }
-
-    const imageName = `${crypto.randomUUID()}.webp`;
-    const imagePath = path.join(uploadDirectory, imageName);
-
-    try {
-        const encodedImage = await sharp(req.file.buffer, imageOptions)
-            .rotate()
-            .webp({ quality: 84 })
-            .toBuffer();
-        const [latest] = await pool.execute("SELECT COALESCE(MAX(sort_order), -1) + 1 AS nextOrder FROM activities");
-        await fs.mkdir(uploadDirectory, { recursive: true });
-        await fs.writeFile(imagePath, encodedImage, { flag: "wx" });
-
-        try {
-            const [result] = await pool.execute(
-                "INSERT INTO activities (title, category, description, image_path, sort_order) VALUES (?, ?, ?, ?, ?)",
-                [title, category, description, `/uploads/${imageName}`, latest[0].nextOrder]
-            );
-            res.status(201).json({
-                activity: {
-                    id: result.insertId,
-                    title,
-                    category,
-                    description,
-                    imagePath: `/uploads/${imageName}`,
-                },
-            });
-        } catch (error) {
-            await fs.unlink(imagePath).catch((unlinkError) => {
-                if (unlinkError.code !== "ENOENT") {
-                    console.error("Could not remove an unlisted activity upload:", unlinkError.message);
-                }
-            });
-            throw error;
-        }
-    } catch (error) {
-        next(error);
-    }
-});
-
-app.delete("/api/admin/activities/:id", async (req, res, next) => {
-    if (!/^\d+$/.test(req.params.id)) {
-        return res.status(400).json({ error: "Invalid activity." });
-    }
-
-    try {
-        const [activities] = await pool.execute(
-            "SELECT image_path FROM activities WHERE id = ? LIMIT 1",
-            [req.params.id]
-        );
-        if (activities.length === 0) {
-            return res.status(404).json({ error: "Activity not found." });
-        }
-
-        await pool.execute("DELETE FROM activities WHERE id = ?", [req.params.id]);
-        const imagePath = activities[0].image_path;
-        if (imagePath.startsWith("/uploads/")) {
-            const imageName = path.basename(imagePath);
-            if (imageName === imagePath.slice("/uploads/".length)) {
-                try {
-                    await fs.unlink(path.join(uploadDirectory, imageName));
-                } catch (error) {
-                    if (error.code !== "ENOENT") {
-                        console.error("Could not remove deleted activity upload:", error.message);
-                        return res.status(500).json({ error: "The activity was removed, but its photo could not be cleaned up." });
-                    }
-                }
-            }
-        }
-        res.json({ message: "Activity deleted." });
-    } catch (error) {
-        next(error);
-    }
-});
-
-app.patch("/api/admin/enquiries/:id", async (req, res, next) => {
-    const { status } = req.body || {};
-    if (!/^\d+$/.test(req.params.id) || !["new", "contacted", "closed"].includes(status)) {
-        return res.status(400).json({ error: "Choose a valid enquiry status." });
-    }
-
-    try {
-        const [result] = await pool.execute(
-            "UPDATE enquiries SET status = ? WHERE id = ?",
-            [status, req.params.id]
-        );
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ error: "Enquiry not found." });
-        }
-        res.json({ message: "Enquiry status updated." });
-    } catch (error) {
-        next(error);
-    }
-});
-
-app.use("/uploads", express.static(uploadDirectory, {
-    dotfiles: "deny",
-    immutable: true,
-    maxAge: "1y",
-}));
-
-const publicFiles = new Set([
-    "/index.html",
-    "/activities.html",
-    "/gallery.html",
-    "/admission.html",
-    "/notices.html",
-    "/admin.html",
-    "/robots.txt",
-    "/style.css",
-    "/admin.css",
-    "/script.js",
-    "/admin.js",
-    "/logo.png",
-    "/school-building.jpeg",
-    "/founder-harshita.jpeg",
-    "/founder-pankaj.jpeg",
-    "/activity-table-manners.jpeg",
-    "/activity-mystery-box.jpeg",
-    "/activity-finger-painting.jpeg",
-]);
-
-app.get(["/", ...publicFiles], (req, res, next) => {
-    const requestedPath = req.path === "/" ? "/index.html" : req.path;
-    res.sendFile(path.join(rootDirectory, requestedPath.slice(1)), {
-        maxAge: process.env.NODE_ENV === "production" ? "1h" : 0,
-    }, (error) => {
+    res.sendFile(path.join(rootDirectory, req.params.file), (error) => {
         if (error) {
             next(error);
         }
@@ -707,70 +558,122 @@ app.use((error, req, res, next) => {
     if (res.headersSent) {
         return next(error);
     }
-
-    if (error instanceof multer.MulterError) {
-        const message = error.code === "LIMIT_FILE_SIZE"
-            ? "Images must be 8 MB or smaller."
-            : "The image could not be uploaded. Please try again.";
-        return res.status(400).json({ error: message });
-    }
-
     if (error.type === "entity.too.large") {
         return res.status(413).json({ error: "The submitted request is too large." });
     }
     if (error.type === "entity.parse.failed") {
         return res.status(400).json({ error: "The submitted request is not valid JSON." });
     }
-
-    console.error("Request failed:", error);
-    res.status(500).json({ error: "Something went wrong. Please try again." });
+    console.error("Request failed:", error.message);
+    res.status(500).json({ error: "The request could not be completed. Please try again later." });
 });
 
 async function startServer() {
-    await fs.mkdir(uploadDirectory, { recursive: true });
-    const databaseWaitTimeout = 60 * 1000;
-    const retryableDatabaseErrors = new Set([
-        "ECONNREFUSED",
-        "ETIMEDOUT",
-        "EHOSTUNREACH",
-        "ENETUNREACH",
-        "PROTOCOL_CONNECTION_LOST",
-    ]);
-    const databaseWaitStarted = Date.now();
-    let hasLoggedDatabaseWait = false;
-
-    while (true) {
-        try {
-            await pool.query("SELECT 1");
-            break;
-        } catch (error) {
-            if (!retryableDatabaseErrors.has(error.code) || Date.now() - databaseWaitStarted >= databaseWaitTimeout) {
-                throw error;
-            }
-
-            if (!hasLoggedDatabaseWait) {
-                console.log("Waiting for MySQL to become available before starting the website...");
-                hasLoggedDatabaseWait = true;
-            }
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-        }
+    await fs.mkdir(path.dirname(databasePath), { recursive: true });
+    await fs.mkdir(path.dirname(siteContentPath), { recursive: true });
+    const databaseFile = await fs.open(databasePath, "a", 0o600);
+    try {
+        await databaseFile.chmod(0o600);
+    } finally {
+        await databaseFile.close();
     }
+    try {
+        const storedContent = JSON.parse(await fs.readFile(siteContentPath, "utf8"));
+        siteContent = {};
+        for (const section of contentSections) {
+            const { content, error } = validateContentItems(section, storedContent[section]);
+            if (error) {
+                throw new Error(`Invalid ${section} in ${siteContentPath}: ${error}`);
+            }
+            siteContent[section] = content;
+        }
+    } catch (error) {
+        if (error.code !== "ENOENT") {
+            throw error;
+        }
+        siteContent = defaultSiteContent;
+        await fs.writeFile(siteContentPath, `${JSON.stringify(siteContent, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+    }
+    await fs.chmod(siteContentPath, 0o600);
+    database = new DatabaseSync(databasePath);
+    database.exec("PRAGMA busy_timeout = 5000;");
+    database.exec(`
+        PRAGMA journal_mode = WAL;
+        PRAGMA foreign_keys = ON;
+        CREATE TABLE IF NOT EXISTS enquiries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_name TEXT NOT NULL CHECK(length(student_name) BETWEEN 1 AND 100),
+            parent_name TEXT NOT NULL CHECK(length(parent_name) BETWEEN 1 AND 100),
+            phone TEXT NOT NULL CHECK(length(phone) BETWEEN 7 AND 25),
+            email TEXT,
+            grade TEXT NOT NULL CHECK(grade IN ('Playgroup', 'Nursery', 'LKG', 'UKG', 'Kindergarten', 'Class 1–5')),
+            address TEXT NOT NULL CHECK(length(address) BETWEEN 1 AND 300),
+            pin_code TEXT NOT NULL CHECK(length(pin_code) = 6 AND pin_code NOT GLOB '*[^0-9]*'),
+            message TEXT NOT NULL DEFAULT '' CHECK(length(message) <= 2000),
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        );
+        CREATE INDEX IF NOT EXISTS enquiries_created_at ON enquiries(created_at DESC);
+        CREATE TABLE IF NOT EXISTS admin_users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            password_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        );
+        CREATE TABLE IF NOT EXISTS admin_sessions (
+            session_id TEXT PRIMARY KEY,
+            admin_id INTEGER REFERENCES admin_users(id) ON DELETE CASCADE,
+            csrf_token TEXT NOT NULL,
+            expires_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS admin_sessions_expiry ON admin_sessions(expires_at);
+    `);
+    insertEnquiry = database.prepare(enquiryStatement);
+    findAdminByEmail = database.prepare("SELECT id, email, password_hash FROM admin_users WHERE email = ?");
+    findAdminById = database.prepare("SELECT id, email FROM admin_users WHERE id = ?");
+    findAdminSession = database.prepare("SELECT * FROM admin_sessions WHERE session_id = ? AND expires_at > ?");
+    insertAdminSession = database.prepare(`
+        INSERT INTO admin_sessions (session_id, admin_id, csrf_token, expires_at)
+        VALUES (@sessionId, @adminId, @csrfToken, @expiresAt)
+    `);
+    deleteAdminSession = database.prepare("DELETE FROM admin_sessions WHERE session_id = ?");
+    deleteExpiredSessions = database.prepare("DELETE FROM admin_sessions WHERE expires_at <= ?");
+    listEnquiries = database.prepare(`
+        SELECT id, student_name AS studentName, parent_name AS parentName, phone, email,
+               grade, address, pin_code AS pinCode, message, created_at AS createdAt
+        FROM enquiries
+        ORDER BY created_at DESC, id DESC
+        LIMIT 500
+    `);
 
-    const server = app.listen(port);
-    await new Promise((resolve, reject) => {
-        server.once("listening", resolve);
-        server.once("error", reject);
+    const adminCount = database.prepare("SELECT COUNT(*) AS count FROM admin_users").get().count;
+    if (adminCount === 0 && adminEmail && bootstrapAdminPasswordHash) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail) ||
+            !/^scrypt\$[a-f0-9]{32}\$[a-f0-9]{128}$/.test(bootstrapAdminPasswordHash)) {
+            throw new Error("ADMIN_EMAIL or ADMIN_PASSWORD_HASH in .env is invalid.");
+        }
+        database.prepare("INSERT INTO admin_users (email, password_hash) VALUES (?, ?)")
+            .run(adminEmail, bootstrapAdminPasswordHash);
+        console.log(`Created the initial enquiry admin account for ${adminEmail}.`);
+    } else if (adminCount === 0) {
+        console.warn("No admin account exists. Set ADMIN_EMAIL and ADMIN_PASSWORD_HASH in .env, then restart.");
+    }
+    deleteExpiredSessions.run(Date.now());
+    dummyPasswordHash = await hashPassword(crypto.randomBytes(32).toString("hex"));
+
+    const server = app.listen(port, () => {
+        console.log(`School website is running at http://localhost:${port}`);
+        console.log(`Admission enquiries are stored in ${databasePath}`);
+        console.log(`Enquiry admin panel: http://localhost:${port}/admin`);
     });
-    console.log(`Mumma's Proud website is running at http://localhost:${port}`);
+    server.on("error", (error) => {
+        console.error("Could not start the website:", error.message);
+        database.close();
+        process.exitCode = 1;
+    });
 }
 
-startServer().catch(async (error) => {
+startServer().catch((error) => {
     console.error("Could not start the website:", error.message);
-    if (error.code === "EADDRINUSE") {
-        console.error(`Port ${port} is already in use. Stop the other server or set PORT to a free port before running npm start.`);
-    }
-    console.error('Check that MySQL is running, then run "npm run db:init".');
-    sessionStore.close();
-    await pool.end();
+    database?.close();
     process.exitCode = 1;
 });

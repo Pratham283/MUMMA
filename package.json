@@ -2,31 +2,21 @@
   "name": "mummas-proud-school",
   "version": "1.0.0",
   "private": true,
-  "description": "Website and admissions backend for Mumma's Proud Junior Wing School",
+  "description": "School website with SQLite-backed admission enquiries",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "db:init": "node db\\init.js",
-    "admin:create": "node db\\create-admin.js",
-    "admin:reset": "node db\\reset-admin.js"
+    "admin:hash": "node scripts/hash-admin-password.js",
+    "admin:reset": "node scripts/reset-admin-password.js"
   },
   "engines": {
-    "node": ">=20"
-  },
-  "overrides": {
-    "mysql2": "^3.24.6"
+    "node": ">=22.13.0"
   },
   "dependencies": {
-    "bcryptjs": "^3.0.3",
     "dotenv": "^18.0.8",
     "express": "^5.3.0",
-    "express-mysql-session": "^3.0.3",
     "express-rate-limit": "^8.7.1",
-    "express-session": "^1.19.0",
-    "helmet": "^8.3.0",
-    "multer": "^2.5.0",
-    "mysql2": "^3.24.6",
-    "sharp": "^0.35.5"
+    "helmet": "^8.3.0"
   }
 }
