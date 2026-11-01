@@ -410,8 +410,95 @@
     gap: 8px;
 }
 
+.admin-sortable-list [data-content-id] {
+    cursor: grab;
+}
+
+.admin-sortable-list [data-content-id]:active {
+    cursor: grabbing;
+}
+
+.admin-sortable-list .is-dragging {
+    opacity: 0.4;
+}
+
+.admin-sortable-list .is-drop-target {
+    outline: 3px solid rgb(213 173 88 / 70%);
+    outline-offset: 3px;
+}
+
+.admin-drag-handle {
+    display: inline-flex;
+    min-height: 36px;
+    align-items: center;
+    padding: 0 7px;
+    border: 1px dashed #c9c3b6;
+    border-radius: 8px;
+    color: #687486;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
 .admin-content-actions .admin-secondary-button {
     min-height: 36px;
+}
+
+.admin-document-list {
+    display: grid;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+.admin-document-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 18px;
+    border: 1px solid #e5dfd1;
+    border-radius: 12px;
+    background: #fff;
+}
+
+.admin-document-row.is-drop-target {
+    outline: 3px solid rgb(213 173 88 / 70%);
+    outline-offset: 3px;
+}
+
+.admin-document-info h3 {
+    margin: 0;
+}
+
+.admin-document-status {
+    margin: 4px 0 0;
+    color: #687486;
+    font-size: 0.88rem;
+}
+
+.admin-file-button {
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.admin-file-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.admin-document-row .admin-content-actions {
+    grid-column: auto;
+    grid-row: auto;
+}
+
+.admin-document-row [hidden] {
+    display: none;
 }
 
 .admin-content-preview {
@@ -436,7 +523,8 @@
     background: #fffdf8;
 }
 
-.admin-gallery-card > img {
+.admin-gallery-card > img,
+.admin-gallery-card > video {
     display: block;
     width: 100%;
     height: 170px;
@@ -607,4 +695,15 @@
     .admin-status-label {
         grid-column: 1;
     }
+}
+
+.upload-field {
+    display: grid;
+    gap: 0.5rem;
+    justify-items: start;
+}
+
+.upload-status {
+    color: var(--muted, #5b6472);
+    font-size: 0.95rem;
 }

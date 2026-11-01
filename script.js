@@ -19,6 +19,61 @@ if (menuToggle && navigation) {
     });
 }
 
+document.querySelectorAll(".nav-dropdown").forEach((dropdown) => {
+    const toggle = dropdown.querySelector(".nav-dropdown-toggle");
+    const setOpen = (open) => {
+        dropdown.classList.toggle("is-open", open);
+        toggle.setAttribute("aria-expanded", String(open));
+    };
+    toggle.addEventListener("click", () => setOpen(!dropdown.classList.contains("is-open")));
+    dropdown.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+            setOpen(false);
+            toggle.focus();
+        }
+    });
+    document.addEventListener("click", (event) => {
+        if (!dropdown.contains(event.target)) {
+            setOpen(false);
+        }
+    });
+    dropdown.addEventListener("click", (event) => {
+        if (event.target.closest("a")) {
+            setOpen(false);
+        }
+    });
+});
+
+async function loadAdmissionDocuments() {
+    const links = [...document.querySelectorAll("[data-document-kind]")];
+    if (!links.length) {
+        return;
+    }
+    let documents = {};
+    try {
+        const response = await fetch("/api/documents");
+        if (response.ok) {
+            documents = (await response.json()).documents || {};
+        }
+    } catch (error) {
+        console.error(error);
+    }
+    links.forEach((link) => {
+        const entry = documents[link.dataset.documentKind];
+        if (entry) {
+            link.href = `/documents/${link.dataset.documentKind}.pdf?v=${encodeURIComponent(entry.updatedAt)}`;
+            return;
+        }
+        link.removeAttribute("href");
+        link.removeAttribute("target");
+        link.setAttribute("aria-disabled", "true");
+        link.title = "This PDF has not been uploaded yet.";
+        link.append(" (coming soon)");
+    });
+}
+
+loadAdmissionDocuments();
+
 function observeGalleryItems(galleryGrid, items) {
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -141,6 +196,31 @@ function renderActivities(activities) {
     });
 }
 
+function renderEvents(events) {
+    const containers = document.querySelectorAll("#events-page-grid, #home-events");
+    if (!containers.length) {
+        return;
+    }
+    const now = new Date();
+    const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    const upcoming = events.filter((event) => event.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+    containers.forEach((container) => {
+        const isHome = container.id === "home-events";
+        const shown = isHome ? upcoming.slice(0, 3) : upcoming;
+        if (!shown.length) {
+            const empty = document.createElement("p");
+            empty.className = "gallery-status";
+            empty.textContent = "There are no upcoming events right now. Please check back soon.";
+            container.replaceChildren(empty);
+            return;
+        }
+        container.replaceChildren(...shown.map((event, index) => {
+            const label = new Date(`${event.date}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
+            return makeActivityCard({ ...event, category: label }, index, isHome ? "h3" : "h2");
+        }));
+    });
+}
+
 function renderGallery(gallery) {
     document.querySelectorAll(".gallery-grid").forEach((container) => {
         if (!gallery.length) {
@@ -157,20 +237,156 @@ function renderGallery(gallery) {
     });
 }
 
+function renderHeroSlideshow(slides, seconds = 3) {
+    const track = document.querySelector("#hero-slide-track");
+    const dots = document.querySelector("#hero-slider-dots");
+    const controls = document.querySelector("#hero-slider-controls");
+    if (!track || !dots || !controls) {
+        return;
+    }
+    if (!slides.length) {
+        track.replaceChildren();
+        dots.replaceChildren();
+        controls.hidden = true;
+        return;
+    }
+
+    let activeIndex = 0;
+    let timer;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const slideElements = slides.map((slide, index) => {
+        const element = document.createElement("article");
+        element.className = `hero-slide${index === 0 ? " is-active" : ""}`;
+        element.setAttribute("aria-hidden", String(index !== 0));
+        const source = slide.src || slide.image;
+        let media;
+        if (slide.type === "video") {
+            media = document.createElement("video");
+            media.src = source;
+            media.muted = true;
+            media.playsInline = true;
+            media.preload = index === 0 ? "auto" : "metadata";
+            media.setAttribute("aria-label", slide.alt || "School video");
+        } else {
+            media = document.createElement("img");
+            media.src = source;
+            media.alt = slide.alt || "";
+            media.loading = index === 0 ? "eager" : "lazy";
+            media.decoding = "async";
+            if (index === 0) {
+                media.fetchPriority = "high";
+            }
+        }
+        element.append(media);
+        return element;
+    });
+    const dotButtons = slides.map((slide, index) => {
+        const button = document.createElement("button");
+        button.className = `hero-slider-dot${index === 0 ? " is-active" : ""}`;
+        button.type = "button";
+        button.setAttribute("aria-label", `Show slide ${index + 1}`);
+        button.setAttribute("aria-current", String(index === 0));
+        button.addEventListener("click", () => showSlide(index));
+        return button;
+    });
+    track.replaceChildren(...slideElements);
+    dots.replaceChildren(...dotButtons);
+    controls.hidden = slides.length < 2;
+
+    function activeVideo() {
+        const media = slideElements[activeIndex].querySelector("video");
+        return media || null;
+    }
+
+    function scheduleNext() {
+        window.clearTimeout(timer);
+        if (slides.length < 2 || reduceMotion || document.hidden) {
+            return;
+        }
+        if (activeVideo()) {
+            timer = window.setTimeout(() => showSlide(activeIndex + 1), 60000);
+        } else {
+            timer = window.setTimeout(() => showSlide(activeIndex + 1), Math.min(Math.max(Number(seconds) || 3, 2), 30) * 1000);
+        }
+    }
+
+    function showSlide(index) {
+        activeIndex = (index + slides.length) % slides.length;
+        slideElements.forEach((element, slideIndex) => {
+            const isActive = slideIndex === activeIndex;
+            element.classList.toggle("is-active", isActive);
+            element.setAttribute("aria-hidden", String(!isActive));
+            dotButtons[slideIndex].classList.toggle("is-active", isActive);
+            dotButtons[slideIndex].setAttribute("aria-current", String(isActive));
+            const video = element.querySelector("video");
+            if (video && !isActive) {
+                video.pause();
+            }
+        });
+        const video = activeVideo();
+        if (video && !reduceMotion) {
+            video.loop = slides.length < 2;
+            video.currentTime = 0;
+            video.play().catch(() => {});
+        }
+        scheduleNext();
+    }
+
+    slideElements.forEach((element, slideIndex) => {
+        const video = element.querySelector("video");
+        if (!video) {
+            return;
+        }
+        video.addEventListener("ended", () => {
+            if (slideIndex === activeIndex && slides.length > 1) {
+                showSlide(activeIndex + 1);
+            }
+        });
+        video.addEventListener("error", () => {
+            if (slideIndex === activeIndex && slides.length > 1) {
+                showSlide(activeIndex + 1);
+            }
+        });
+    });
+
+    controls.querySelectorAll("[data-slide-step]").forEach((button) => {
+        button.addEventListener("click", () => showSlide(activeIndex + Number(button.dataset.slideStep)));
+    });
+    document.addEventListener("visibilitychange", () => {
+        const video = activeVideo();
+        if (document.hidden) {
+            window.clearTimeout(timer);
+            video?.pause();
+        } else {
+            if (video && !reduceMotion) {
+                video.play().catch(() => {});
+            }
+            scheduleNext();
+        }
+    });
+    showSlide(0);
+}
+
 async function loadSiteContent() {
     const noticeLists = [...document.querySelectorAll("#notice-preview-list, #notices-page-list")];
     try {
-        const response = await fetch("/api/content");
+        let response = await fetch("/api/content");
+        if (response.status === 404) {
+            response = await fetch("/data/site-content.json");
+        }
         if (!response.ok) {
             throw new Error("The school website content could not be loaded.");
         }
         const content = await response.json();
-        if (!Array.isArray(content.notices) || !Array.isArray(content.activities) || !Array.isArray(content.gallery)) {
+        if (!Array.isArray(content.notices) || !Array.isArray(content.activities) ||
+            !Array.isArray(content.gallery) || !Array.isArray(content.heroSlides)) {
             throw new Error("The school website content is not available.");
         }
         noticeLists.forEach((container) => renderNoticeList(container, content.notices));
         renderActivities(content.activities);
+        renderEvents(Array.isArray(content.events) ? content.events : []);
         renderGallery(content.gallery);
+        renderHeroSlideshow(content.heroSlides, content.heroSlideSeconds);
     } catch (error) {
         console.error(error);
         noticeLists.forEach((container) => {

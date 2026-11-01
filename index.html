@@ -30,7 +30,7 @@
         "name": "Mumma's Proud Junior Wing School",
         "description": "Play-based, activity-focused learning for children in Gwalior, from Playgroup to Class 5.",
         "email": "mummaproud2003@gmail.com",
-        "telephone": ["+91 88199 82414", "+91 93991 17560"],
+        "telephone": ["0751 34142801", "+91 88199 82414", "+91 93991 17560"],
         "address": {
           "@type": "PostalAddress",
           "streetAddress": "Near Maa Shitla Pvt. ITI, Ektapuri Colony, Barahbigha, New Payga Gudi, Sikander Kampoo, Lashkar",
@@ -47,7 +47,7 @@
       }
     </script>
   </head>
-  <body>
+  <body class="home-page">
     <header>
       <div class="header-note">A joyful place to learn, grow &amp; shine</div>
       <nav class="site-nav" aria-label="Main navigation">
@@ -79,7 +79,16 @@
           <li><a class="nav-link" href="#founder">Founder</a></li>
           <li><a class="nav-link" href="#activities">Activities</a></li>
           <li><a class="nav-link" href="notices.html">Notices</a></li>
+          <li><a class="nav-link" href="#events">Events</a></li>
           <li><a class="nav-link" href="/gallery.html">Gallery</a></li>
+          <li class="nav-dropdown">
+            <button class="nav-link nav-dropdown-toggle" type="button" aria-expanded="false" aria-haspopup="true">Admission <span class="nav-caret" aria-hidden="true">▾</span></button>
+            <ul class="nav-dropdown-menu">
+              <li><a class="nav-dropdown-link" href="/documents/book-list.pdf" data-document-kind="book-list" target="_blank" rel="noopener">Book list</a></li>
+              <li><a class="nav-dropdown-link" href="/documents/fee-structure.pdf" data-document-kind="fee-structure" target="_blank" rel="noopener">Fee structure</a></li>
+              <li><a class="nav-dropdown-link" href="/documents/admission-form.pdf" data-document-kind="admission-form" target="_blank" rel="noopener">Admission form</a></li>
+            </ul>
+          </li>
           <li><a class="nav-link" href="#contact">Contact</a></li>
           <li>
             <a class="nav-link nav-contact" href="admission.html"
@@ -90,52 +99,16 @@
       </nav>
     </header>
     <main>
-      <section id="home" class="hero">
-        <div class="hero-content">
-          <p class="hero-eyebrow">
-            <span aria-hidden="true"></span> Learning with love in Gwalior
-          </p>
-          <h1>Little minds.<br /><span>Big bright</span> futures.</h1>
-          <p class="hero-description">
-            A joyful place where children learn through play, explore their
-            creativity, and grow with confidence.
-          </p>
-          <div class="hero-actions">
-            <a class="hero-button hero-button-primary" href="admission.html"
-              >Enquire for admission <span aria-hidden="true">↗</span></a
-            >
-            <a class="hero-button hero-button-secondary" href="#about"
-              >Discover our school <span aria-hidden="true">↓</span></a
-            >
-          </div>
-          <div class="hero-highlights" aria-label="School highlights">
-            <span
-              ><span class="highlight-dot" aria-hidden="true">✓</span> Playgroup
-              to Class 5</span
-            >
-            <span
-              ><span class="highlight-dot" aria-hidden="true">✓</span> Learning
-              through play</span
-            >
-          </div>
+      <section id="home" class="hero hero-slideshow" aria-label="Mumma's Proud school slideshow">
+        <div class="hero-slide-track" id="hero-slide-track" aria-live="off">
+          <article class="hero-slide is-active" aria-hidden="false">
+            <img src="/school-building.jpeg" alt="Mumma's Proud Junior Wing School building in Gwalior" fetchpriority="high" />
+          </article>
         </div>
-        <div class="hero-art">
-          <div class="hero-art-orbit" aria-hidden="true"></div>
-          <div class="hero-sparkle hero-sparkle-one" aria-hidden="true">✦</div>
-          <div class="hero-sparkle hero-sparkle-two" aria-hidden="true">✧</div>
-          <div class="hero-art-card">
-            <img
-              src="school-building.jpeg"
-              alt="Mumma's Proud Junior Wing School building in Gwalior"
-              fetchpriority="high"
-            />
-          </div>
-          <div class="hero-floating-note hero-note-top">
-            <span aria-hidden="true">✦</span> Learn, play &amp; shine
-          </div>
-          <div class="hero-floating-note hero-note-bottom">
-            <span aria-hidden="true">♥</span> A caring start for every child
-          </div>
+        <div class="hero-slider-controls" id="hero-slider-controls" aria-label="Slideshow controls">
+          <button class="hero-slider-arrow" type="button" data-slide-step="-1" aria-label="Previous slide">‹</button>
+          <div class="hero-slider-dots" id="hero-slider-dots" role="group" aria-label="Choose a slideshow photo"></div>
+          <button class="hero-slider-arrow" type="button" data-slide-step="1" aria-label="Next slide">›</button>
         </div>
       </section>
 
@@ -298,6 +271,23 @@
         </div>
       </section>
 
+      <section id="events" class="events-section">
+        <div class="activities-inner">
+          <div class="activities-heading">
+            <p class="section-eyebrow">What's coming up</p>
+            <h2>Upcoming <span>events.</span></h2>
+            <p>Celebrations, programmes, and special days at our school.</p>
+          </div>
+          <div class="activities-grid" id="home-events">
+            <p class="gallery-status">Loading upcoming events…</p>
+          </div>
+          <a class="activities-toggle" href="/events.html">
+            <span>All events</span
+            ><span class="activities-toggle-icon" aria-hidden="true">↗</span>
+          </a>
+        </div>
+      </section>
+
       <section id="founder" class="founders-section">
         <div class="founders-inner">
           <div class="founders-heading">
@@ -312,7 +302,7 @@
             <article class="founder-card">
               <div class="founder-photo founder-photo-harshita">
                 <img
-                  src="founder-harshita.jpeg"
+                  src="founder-harshita-portrait.jpeg"
                   alt="Harshita Tomar, founder of Mumma's Proud Junior Wing School"
                   loading="eager"
                 />
@@ -331,14 +321,14 @@
               <div class="founder-photo founder-photo-pankaj">
                 <img
                   src="founder-pankaj.jpeg"
-                  alt="Pankaj Therwani, founder of Mumma's Proud Junior Wing School"
+                  alt="Pankaj Pherwani, founder of Mumma's Proud Junior Wing School"
                   loading="eager"
                 />
                 <span class="founder-photo-accent" aria-hidden="true"></span>
               </div>
               <div class="founder-info">
                 <p class="founder-role">Founder</p>
-                <h3>Pankaj Therwani</h3>
+                <h3>Pankaj Pherwani</h3>
                 <p>
                   Supporting a nurturing school community where little minds are
                   inspired to shine.
@@ -449,6 +439,8 @@
             <li>
               <span class="contact-label">Phone</span>
               <span
+                ><a href="tel:+9175134142801">0751 34142801</a
+                ><span class="phone-separator"> · </span
                 ><a href="tel:+918819982414">+91 88199 82414</a
                 ><span class="phone-separator"> · </span
                 ><a href="tel:+919399117560">+91 93991 17560</a></span

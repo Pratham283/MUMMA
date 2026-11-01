@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Gallery | School Admin | Mumma's Proud</title>
+    <link rel="icon" href="/logo.png" type="image/png">
+    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/admin.css">
+    <script src="/admin.js" defer></script>
+</head>
+<body class="admin-page">
+    <header class="admin-header">
+        <a class="brand" href="/" aria-label="Mumma's Proud Junior Wing School home">
+            <img src="/logo.png" alt="">
+            <span class="brand-copy">
+                <strong>Mumma's Proud</strong>
+                <span>School admin panel</span>
+            </span>
+        </a>
+        <a class="admin-home-link" href="/">View school website <span aria-hidden="true">↗</span></a>
+    </header>
+    <main class="admin-main">
+        <section class="admin-login-card" id="login-panel" aria-labelledby="login-title" hidden>
+            <p class="section-eyebrow">School administration</p>
+            <h1 id="login-title">School admin panel</h1>
+            <p class="admin-intro">Sign in to manage school notices, activities, gallery, and admission enquiries.</p>
+            <form id="login-form">
+                <label for="admin-email">Email address</label>
+                <input id="admin-email" name="email" type="email" autocomplete="username" maxlength="254" required>
+                <label for="admin-password">Password</label>
+                <input id="admin-password" name="password" type="password" autocomplete="current-password" maxlength="256" required>
+                <button class="admin-primary-button" type="submit">Sign in</button>
+                <p class="admin-message" id="login-message" role="status" aria-live="polite"></p>
+            </form>
+        </section>
+
+        <section class="admin-dashboard" id="dashboard-panel" hidden>
+            <div class="admin-title-row">
+                <div>
+                    <p class="section-eyebrow">School administration</p>
+                    <h1>School admin panel</h1>
+                    <p class="admin-intro" id="admin-identity"></p>
+                </div>
+                <button class="admin-secondary-button" id="logout-button" type="button">Sign out</button>
+            </div>
+            <p class="admin-message" id="dashboard-message" role="status" aria-live="polite"></p>
+            <nav class="admin-page-nav" aria-label="Admin sections">
+                <a href="/admin.html">Enquiries</a>
+                <a href="/admin-slideshow.html">Homepage slideshow</a>
+                <a href="/admin-notices.html">Notices</a>
+                <a href="/admin-activities.html">Activities</a>
+                <a href="/admin-events.html">Events</a>
+                <a href="/admin-gallery.html" aria-current="page">Gallery</a>
+                <a href="/admin-documents.html">Admission PDFs</a>
+            </nav>
+            <section class="admin-section" id="admin-gallery" aria-labelledby="admin-gallery-title">
+                <div class="admin-section-heading">
+                    <div>
+                        <p class="section-eyebrow">School memories</p>
+                        <h2 id="admin-gallery-title">Gallery</h2>
+                    </div>
+                </div>
+                <p class="admin-intro">Add, edit, or remove gallery photos shown on the home page and the separate Gallery page. Drag cards to change their order. Choose each photo from your computer or phone.</p>
+                <form class="activity-admin-form" id="gallery-form">
+                    <input type="hidden" name="id">
+                    <label>Photo title
+                        <input name="title" maxlength="100" required>
+                    </label>
+                    <label>Caption
+                        <input name="caption" maxlength="120" required>
+                    </label>
+                    <div class="activity-admin-photo upload-field">
+                        <span>Photo (up to 15 MB)</span>
+                        <input name="image" type="hidden">
+                        <button class="admin-secondary-button" type="button" data-choose-upload>Choose photo</button>
+                        <input class="admin-file-input" type="file" data-upload-target="image" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" tabindex="-1" aria-hidden="true">
+                        <span class="upload-status" role="status">No file chosen yet.</span>
+                    </div>
+                    <label class="activity-admin-photo">Image description (alt text, optional)
+                        <input name="alt" maxlength="250">
+                    </label>
+                    <button class="admin-primary-button" type="submit">Add photo</button>
+                    <button class="admin-secondary-button" type="button" data-cancel-edit="gallery" hidden>Cancel edit</button>
+                </form>
+                <div class="admin-gallery-grid admin-sortable-list" id="admin-gallery-list" data-section="gallery" aria-live="polite"></div>
+            </section>
+        </section>
+    </main>
+</body>
+</html>

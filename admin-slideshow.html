@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Homepage slideshow | School Admin | Mumma's Proud</title>
+    <link rel="icon" href="/logo.png" type="image/png">
+    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/admin.css">
+    <script src="/admin.js" defer></script>
+</head>
+<body class="admin-page">
+    <header class="admin-header">
+        <a class="brand" href="/" aria-label="Mumma's Proud Junior Wing School home">
+            <img src="/logo.png" alt="">
+            <span class="brand-copy">
+                <strong>Mumma's Proud</strong>
+                <span>School admin panel</span>
+            </span>
+        </a>
+        <a class="admin-home-link" href="/">View school website <span aria-hidden="true">↗</span></a>
+    </header>
+    <main class="admin-main">
+        <section class="admin-login-card" id="login-panel" aria-labelledby="login-title" hidden>
+            <p class="section-eyebrow">School administration</p>
+            <h1 id="login-title">School admin panel</h1>
+            <p class="admin-intro">Sign in to manage school notices, activities, gallery, and admission enquiries.</p>
+            <form id="login-form">
+                <label for="admin-email">Email address</label>
+                <input id="admin-email" name="email" type="email" autocomplete="username" maxlength="254" required>
+                <label for="admin-password">Password</label>
+                <input id="admin-password" name="password" type="password" autocomplete="current-password" maxlength="256" required>
+                <button class="admin-primary-button" type="submit">Sign in</button>
+                <p class="admin-message" id="login-message" role="status" aria-live="polite"></p>
+            </form>
+        </section>
+
+        <section class="admin-dashboard" id="dashboard-panel" hidden>
+            <div class="admin-title-row">
+                <div>
+                    <p class="section-eyebrow">School administration</p>
+                    <h1>School admin panel</h1>
+                    <p class="admin-intro" id="admin-identity"></p>
+                </div>
+                <button class="admin-secondary-button" id="logout-button" type="button">Sign out</button>
+            </div>
+            <p class="admin-message" id="dashboard-message" role="status" aria-live="polite"></p>
+            <nav class="admin-page-nav" aria-label="Admin sections">
+                <a href="/admin.html">Enquiries</a>
+                <a href="/admin-slideshow.html" aria-current="page">Homepage slideshow</a>
+                <a href="/admin-notices.html">Notices</a>
+                <a href="/admin-activities.html">Activities</a>
+                <a href="/admin-events.html">Events</a>
+                <a href="/admin-gallery.html">Gallery</a>
+                <a href="/admin-documents.html">Admission PDFs</a>
+            </nav>
+            <section class="admin-section" id="admin-hero-slides" aria-labelledby="admin-hero-slides-title">
+                <div class="admin-section-heading">
+                    <div>
+                        <p class="section-eyebrow">Homepage first impression</p>
+                        <h2 id="admin-hero-slides-title">Full-screen slideshow</h2>
+                    </div>
+                </div>
+                <p class="admin-intro">Manage the full-screen slideshow at the top of the homepage. It shows only photos and videos (no text). Add up to 5 slides, edit or delete them, and drag cards to change their order. Choose a photo or video from your computer or phone. Photos: JPG, PNG, WEBP. Videos: MP4, WEBM.</p>
+                <form class="activity-admin-form" id="hero-slide-form">
+                    <input type="hidden" name="id">
+                    <label>Slide type
+                        <select name="type" required>
+                            <option value="image">Photo</option>
+                            <option value="video">Video</option>
+                        </select>
+                    </label>
+                    <div class="activity-admin-photo upload-field">
+                        <span>Photo or video (photo up to 15 MB, video up to 500 MB)</span>
+                        <input name="src" type="hidden">
+                        <button class="admin-secondary-button" type="button" data-choose-upload>Choose photo or video</button>
+                        <input class="admin-file-input" type="file" data-upload-target="src" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,.jpg,.jpeg,.png,.webp,.mp4,.webm" tabindex="-1" aria-hidden="true">
+                        <span class="upload-status" role="status">No file chosen yet.</span>
+                    </div>
+                    <label class="activity-admin-photo">Short description for screen readers (optional)
+                        <input name="alt" maxlength="250">
+                    </label>
+                    <button class="admin-primary-button" type="submit">Add slide</button>
+                    <button class="admin-secondary-button" type="button" data-cancel-edit="heroSlides" hidden>Cancel edit</button>
+                </form>
+                <p class="admin-intro" id="hero-slide-limit" role="status"></p>
+                <form class="activity-admin-form" id="hero-timing-form">
+                    <label>Each photo stays for (seconds, 2 to 30)
+                        <input name="seconds" type="number" min="2" max="30" step="1" value="3" required>
+                    </label>
+                    <button class="admin-primary-button" type="submit">Save slide time</button>
+                </form>
+                <div class="admin-gallery-grid admin-sortable-list" id="admin-hero-slides-list" data-section="heroSlides" aria-live="polite"></div>
+            </section>
+        </section>
+    </main>
+</body>
+</html>

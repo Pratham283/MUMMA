@@ -14,7 +14,7 @@ const app = express();
 const rootDirectory = __dirname;
 const dataDirectory = path.join(rootDirectory, "data");
 const databasePath = process.env.ENQUIRY_DB_PATH || path.join(dataDirectory, "enquiries.sqlite");
-const siteContentPath = process.env.SITE_CONTENT_PATH || path.join(dataDirectory, "site-content.json");
+const legacySiteContentPath = process.env.SITE_CONTENT_PATH || path.join(dataDirectory, "site-content.json");
 const port = Number(process.env.PORT) || 3001;
 const maxRequestBytes = 256 * 1024;
 const sessionLifetime = 60 * 60 * 1000;
@@ -28,10 +28,18 @@ const publicFiles = new Set([
     "activity-finger-painting.jpeg",
     "activity-mystery-box.jpeg",
     "activity-table-manners.jpeg",
+    "admin-activities.html",
+    "admin-documents.html",
+    "admin-events.html",
+    "admin-gallery.html",
+    "admin-notices.html",
+    "admin-slideshow.html",
     "admin.css",
     "admin.html",
     "admin.js",
     "admission.html",
+    "events.html",
+    "founder-harshita-portrait.jpeg",
     "founder-harshita.jpeg",
     "founder-pankaj.jpeg",
     "gallery.html",
@@ -71,6 +79,7 @@ app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             imgSrc: ["'self'", "data:", "https:"],
+            mediaSrc: ["'self'", "https:"],
         },
     },
 }));
@@ -86,8 +95,21 @@ let insertAdminSession;
 let listEnquiries;
 let deleteAdminSession;
 let deleteExpiredSessions;
-let siteContent;
-let contentWriteQueue = Promise.resolve();
+let findSiteContent;
+let saveSiteContentStatement;
+let findHeroSlides;
+let findHeroSettings;
+let listDocuments;
+let findDocument;
+let saveDocument;
+let deleteDocument;
+let findMedia;
+let findMediaMeta;
+let findMediaRange;
+let saveMedia;
+let deleteMedia;
+let saveHeroSettingsStatement;
+let saveHeroSlidesStatement;
 const enquiryRateLimit = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 5,
@@ -120,12 +142,32 @@ const enquiryStatement = `
 
 const defaultSiteContent = {
     notices: [],
+    heroSlides: [
+        {
+            id: "school-welcome",
+            type: "image",
+            src: "/school-building.jpeg",
+            alt: "Mumma's Proud Junior Wing School building in Gwalior",
+        },
+        {
+            id: "learning-together",
+            type: "image",
+            src: "/activity-table-manners.jpeg",
+            alt: "Children learning table manners together at school",
+        },
+        {
+            id: "curious-learners",
+            type: "image",
+            src: "/activity-mystery-box.jpeg",
+            alt: "Children exploring a mystery learning box with their teacher",
+        },
+    ],
     activities: [
         {
             id: "table-manners",
             title: "Table Manners",
             category: "Everyday life skills",
-            description: "Children practise polite mealtime habits, sharing, and using tableware with care—building independence and respect for others.",
+            description: "Children practise polite mealtime habits, sharing, and using tableware with careâ€”building independence and respect for others.",
             image: "/activity-table-manners.jpeg",
             alt: "Children practising table manners together at school",
         },
@@ -141,11 +183,12 @@ const defaultSiteContent = {
             id: "finger-activity",
             title: "Finger Activity",
             category: "Creative exploration",
-            description: "Hands-on finger activities help little learners practise fine motor control and hand–eye coordination while exploring colour, texture, and creativity.",
+            description: "Hands-on finger activities help little learners practise fine motor control and handâ€“eye coordination while exploring colour, texture, and creativity.",
             image: "/activity-finger-painting.jpeg",
             alt: "Children taking part in a colourful finger activity",
         },
     ],
+    events: [],
     gallery: [
         {
             id: "school",
@@ -185,10 +228,12 @@ const defaultSiteContent = {
     ],
 };
 
-const contentSections = new Set(["notices", "activities", "gallery"]);
+const databaseContentSections = ["notices", "activities", "events", "gallery"];
+const contentSections = new Set([...databaseContentSections, "heroSlides"]);
 
 function validateContentItems(section, items) {
-    if (!contentSections.has(section) || !Array.isArray(items) || items.length > 100) {
+    const maximumItems = section === "heroSlides" ? 5 : 100;
+    if (!contentSections.has(section) || !Array.isArray(items) || items.length > maximumItems) {
         return { error: "The content submitted is not valid." };
     }
 
@@ -221,9 +266,30 @@ function validateContentItems(section, items) {
                 return { error: "Check each notice title, message, date, and priority." };
             }
             validated = { id: item.id, title, body, date, priority };
+        } else if (section === "heroSlides") {
+            const src = text("src", 2048) || text("image", 2048);
+            const alt = item.alt === undefined ? "" : text("alt", 250, false);
+            const imagePattern = /\.(?:jpe?g|png|webp)$/i;
+            const videoPattern = /\.(?:mp4|webm)$/i;
+            const type = item.type === "video" || (item.type === undefined && src && videoPattern.test(src)) ? "video" : "image";
+            const extensionPattern = type === "video" ? videoPattern : imagePattern;
+            let isHttpsMedia = false;
+            if (src?.startsWith("https://")) {
+                try {
+                    const mediaUrl = new URL(src);
+                    isHttpsMedia = !mediaUrl.username && !mediaUrl.password && extensionPattern.test(mediaUrl.pathname);
+                } catch {
+                    isHttpsMedia = false;
+                }
+            }
+            const isLocalMedia = src && /^\/(?:slides\/|uploads\/)?[A-Za-z0-9][A-Za-z0-9._-]*$/.test(src) && extensionPattern.test(src);
+            if (!src || alt === null || (!isLocalMedia && !isHttpsMedia)) {
+                return { error: "Each slide needs a valid photo or video (JPG, PNG, WEBP, MP4 or WEBM)." };
+            }
+            validated = { id: item.id, type, src, alt };
         } else {
             const title = text("title", 100);
-            const captionOrCategory = text(section === "activities" ? "category" : "caption", 120);
+            const captionOrCategory = section === "events" ? text("date", 10) : text(section === "activities" ? "category" : "caption", 120);
             const image = text("image", 2048);
             const alt = text("alt", 250, false);
             let isHttpsImage = false;
@@ -235,16 +301,24 @@ function validateContentItems(section, items) {
                     isHttpsImage = false;
                 }
             }
-            const isLocalImage = image && /^\/[A-Za-z0-9][A-Za-z0-9._-]*\.(?:jpe?g|png|webp)$/i.test(image);
+            const isLocalImage = image && /^\/(?:uploads\/)?[A-Za-z0-9][A-Za-z0-9._-]*\.(?:jpe?g|png|webp)$/i.test(image);
             if (!title || !captionOrCategory || !image || alt === null || (!isLocalImage && !isHttpsImage)) {
                 return { error: "Check each item title, caption/category, and secure image URL." };
             }
-            if (section === "activities") {
+            if (section === "activities" || section === "events") {
                 const description = text("description", 1500);
                 if (!description) {
-                    return { error: "Each activity needs a description." };
+                    return { error: "Each activity or event needs a description." };
                 }
-                validated = { id: item.id, title, category: captionOrCategory, description, image, alt };
+                if (section === "events") {
+                    const parsedDate = new Date(`${captionOrCategory}T00:00:00Z`);
+                    if (!/^\d{4}-\d{2}-\d{2}$/.test(captionOrCategory) || Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== captionOrCategory) {
+                        return { error: "Each event needs a valid date." };
+                    }
+                    validated = { id: item.id, title, date: captionOrCategory, description, image, alt };
+                } else {
+                    validated = { id: item.id, title, category: captionOrCategory, description, image, alt };
+                }
             } else {
                 validated = { id: item.id, title, caption: captionOrCategory, image, alt };
             }
@@ -254,18 +328,50 @@ function validateContentItems(section, items) {
     return { content };
 }
 
+function readSiteContent() {
+    const content = Object.fromEntries(databaseContentSections.map((section) => {
+        const row = findSiteContent.get(section);
+        if (!row) {
+            throw new Error(`The ${section} content is missing from the database.`);
+        }
+        const items = JSON.parse(row.items_json);
+        const { content, error } = validateContentItems(section, items);
+        if (error) {
+            throw new Error(`The ${section} content in the database is invalid: ${error}`);
+        }
+        return [section, content];
+    }));
+    const slideRow = findHeroSlides.get();
+    if (!slideRow) {
+        throw new Error("The hero slideshow content is missing from the database.");
+    }
+    const slides = JSON.parse(slideRow.items_json);
+    const { content: heroSlides, error } = validateContentItems("heroSlides", slides);
+    if (error) {
+        throw new Error(`The hero slideshow content in the database is invalid: ${error}`);
+    }
+    return { ...content, heroSlides, heroSlideSeconds: findHeroSettings.get().seconds };
+}
+
+function removeUnusedMedia() {
+    const content = readSiteContent();
+    const used = new Set(JSON.stringify(content).match(/[a-f0-9]{32}\.(?:jpg|png|webp|mp4|webm)/g) || []);
+    const stale = database.prepare("SELECT name FROM media_files WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 hour')").all();
+    for (const { name } of stale) {
+        if (!used.has(name)) {
+            deleteMedia.run(name);
+        }
+    }
+}
+
 function saveContentSection(section, items) {
-    const save = async () => {
-        const updatedContent = { ...siteContent, [section]: items };
-        const temporaryPath = `${siteContentPath}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
-        await fs.writeFile(temporaryPath, `${JSON.stringify(updatedContent, null, 2)}\n`, { flag: "wx", mode: 0o600 });
-        await fs.rename(temporaryPath, siteContentPath);
-        siteContent = updatedContent;
-        return siteContent;
-    };
-    const pendingSave = contentWriteQueue.then(save);
-    contentWriteQueue = pendingSave.catch(() => {});
-    return pendingSave;
+    if (section === "heroSlides") {
+        saveHeroSlidesStatement.run(JSON.stringify(items));
+    } else {
+        saveSiteContentStatement.run(section, JSON.stringify(items));
+    }
+    removeUnusedMedia();
+    return items;
 }
 
 function validateEnquiry(body) {
@@ -280,6 +386,9 @@ function validateEnquiry(body) {
         message: typeof body.message === "string" ? body.message.trim() : "",
     };
 
+    if (body.consent !== "yes") {
+        return { error: "Please tick the consent box so we can use your details to respond." };
+    }
     if (!enquiry.studentName || enquiry.studentName.length > 100) {
         return { error: "Enter the student's name (up to 100 characters)." };
     }
@@ -292,7 +401,7 @@ function validateEnquiry(body) {
     if (enquiry.email.length > 254 || (enquiry.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(enquiry.email))) {
         return { error: "Enter a valid email address, or leave it blank." };
     }
-    if (!["Playgroup", "Nursery", "LKG", "UKG", "Kindergarten", "Class 1–5"].includes(enquiry.grade)) {
+    if (!["Playgroup", "Nursery", "LKG", "UKG", "Class 1â€“5"].includes(enquiry.grade)) {
         return { error: "Choose a valid class of interest." };
     }
     if (!enquiry.address || enquiry.address.length > 300) {
@@ -427,9 +536,42 @@ app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
 });
 
+const documentKinds = new Set(["book-list", "fee-structure", "admission-form"]);
+const maximumDocumentBytes = 10 * 1024 * 1024;
+const maximumImageBytes = 15 * 1024 * 1024;
+const maximumVideoBytes = 500 * 1024 * 1024;
+const startsWith = (file, bytes, offset = 0) => bytes.every((byte, index) => file[offset + index] === byte);
+const mediaTypes = {
+    "image/jpeg": { kind: "image", extension: "jpg", matches: (file) => startsWith(file, [0xff, 0xd8, 0xff]) },
+    "image/png": { kind: "image", extension: "png", matches: (file) => startsWith(file, [0x89, 0x50, 0x4e, 0x47]) },
+    "image/webp": { kind: "image", extension: "webp", matches: (file) => startsWith(file, [0x52, 0x49, 0x46, 0x46]) && startsWith(file, [0x57, 0x45, 0x42, 0x50], 8) },
+    "video/mp4": { kind: "video", extension: "mp4", matches: (file) => startsWith(file, [0x66, 0x74, 0x79, 0x70], 4) },
+    "video/webm": { kind: "video", extension: "webm", matches: (file) => startsWith(file, [0x1a, 0x45, 0xdf, 0xa3]) },
+};
+
+app.get("/api/documents", (req, res) => {
+    res.set("Cache-Control", "no-store");
+    const documents = Object.fromEntries(listDocuments.all().map((row) => [row.kind, { updatedAt: row.updated_at }]));
+    res.json({ documents });
+});
+
+app.get("/documents/:file", (req, res, next) => {
+    const match = /^(book-list|fee-structure|admission-form)\.pdf$/.exec(req.params.file);
+    const row = match ? findDocument.get(match[1]) : null;
+    if (!row) {
+        return next();
+    }
+    res.set({
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `inline; filename="${match[1]}.pdf"`,
+        "Cache-Control": "no-cache",
+    });
+    res.send(Buffer.from(row.data));
+});
+
 app.get("/api/content", (req, res) => {
     res.set("Cache-Control", "no-store");
-    res.json(siteContent);
+    res.json(readSiteContent());
 });
 
 app.post("/api/enquiries", enquiryRateLimit, (req, res, next) => {
@@ -514,15 +656,75 @@ app.use("/api/admin", (req, res, next) => {
     validateAdminMutation(req, res, next);
 });
 
-app.put("/api/admin/content/:section", requireAdmin, async (req, res, next) => {
+app.put("/api/admin/media", requireAdmin, express.raw({ type: Object.keys(mediaTypes), limit: maximumVideoBytes }), async (req, res, next) => {
+    const media = mediaTypes[req.get("content-type")?.split(";")[0].trim().toLowerCase()];
+    const file = req.body;
+    if (!media || !Buffer.isBuffer(file) || file.length === 0 || !media.matches(file)) {
+        return res.status(400).json({ error: "Please choose a JPG, PNG, WEBP photo or an MP4, WEBM video." });
+    }
+    if (media.kind === "image" && file.length > maximumImageBytes) {
+        return res.status(413).json({ error: "Photos must be 15 MB or smaller." });
+    }
+    try {
+        const name = `${crypto.randomBytes(16).toString("hex")}.${media.extension}`;
+        saveMedia.run(name, req.get("content-type").split(";")[0].trim().toLowerCase(), file);
+        res.status(201).json({ path: `/uploads/${name}`, type: media.kind, message: "File uploaded." });
+    } catch (saveError) {
+        next(saveError);
+    }
+});
+
+app.put("/api/admin/documents/:kind", requireAdmin, express.raw({ type: "application/pdf", limit: maximumDocumentBytes }), (req, res, next) => {
+    const kind = req.params.kind;
+    const file = req.body;
+    if (!documentKinds.has(kind)) {
+        return res.status(404).json({ error: "Unknown document." });
+    }
+    if (!Buffer.isBuffer(file) || file.length === 0 || file.subarray(0, 5).toString("latin1") !== "%PDF-") {
+        return res.status(400).json({ error: "Please choose a valid PDF file." });
+    }
+    try {
+        saveDocument.run(kind, file);
+        res.json({ message: "PDF saved and published." });
+    } catch (saveError) {
+        next(saveError);
+    }
+});
+
+app.delete("/api/admin/documents/:kind", requireAdmin, (req, res, next) => {
+    if (!documentKinds.has(req.params.kind)) {
+        return res.status(404).json({ error: "Unknown document." });
+    }
+    try {
+        deleteDocument.run(req.params.kind);
+        res.json({ message: "PDF removed from the website." });
+    } catch (deleteError) {
+        next(deleteError);
+    }
+});
+
+app.put("/api/admin/hero-settings", requireAdmin, (req, res, next) => {
+    const seconds = req.body?.seconds;
+    if (!Number.isInteger(seconds) || seconds < 2 || seconds > 30) {
+        return res.status(400).json({ error: "Choose a slide time between 2 and 30 seconds." });
+    }
+    try {
+        saveHeroSettingsStatement.run(seconds);
+        res.json({ seconds, message: "Slide time saved and published." });
+    } catch (saveError) {
+        next(saveError);
+    }
+});
+
+app.put("/api/admin/content/:section", requireAdmin, (req, res, next) => {
     const section = req.params.section;
     const { content, error } = validateContentItems(section, req.body?.items);
     if (error) {
         return res.status(400).json({ error });
     }
     try {
-        const updatedContent = await saveContentSection(section, content);
-        res.json({ items: updatedContent[section], message: "Changes saved and published." });
+        const items = saveContentSection(section, content);
+        res.json({ items, message: "Changes saved and published." });
     } catch (saveError) {
         next(saveError);
     }
@@ -534,6 +736,39 @@ app.get("/", (req, res) => {
 
 app.get("/admin", (req, res) => {
     res.sendFile(path.join(rootDirectory, "admin.html"));
+});
+
+app.use("/slides", express.static(path.join(rootDirectory, "slides"), {
+    index: false,
+    dotfiles: "ignore",
+    redirect: false,
+    setHeaders: (res) => res.setHeader("X-Content-Type-Options", "nosniff"),
+}));
+
+app.get("/uploads/:file", (req, res, next) => {
+    const meta = /^[a-f0-9]{32}\.(?:jpg|png|webp|mp4|webm)$/.test(req.params.file) ? findMediaMeta.get(req.params.file) : null;
+    if (!meta) {
+        return next();
+    }
+    const size = meta.size;
+    res.set({
+        "Content-Type": meta.content_type,
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "public, max-age=2592000, immutable",
+        "X-Content-Type-Options": "nosniff",
+    });
+    const range = /^bytes=(\d*)-(\d*)$/.exec(req.get("range") || "");
+    if (!range || (range[1] === "" && range[2] === "")) {
+        return res.send(Buffer.from(findMedia.get(req.params.file).data));
+    }
+    const start = range[1] === "" ? Math.max(size - Number(range[2]), 0) : Number(range[1]);
+    const end = range[1] === "" || range[2] === "" ? size - 1 : Math.min(Number(range[2]), size - 1);
+    if (start >= size || start > end) {
+        res.set("Content-Range", `bytes */${size}`);
+        return res.sendStatus(416);
+    }
+    const part = findMediaRange.get(start + 1, end - start + 1, req.params.file);
+    res.status(206).set("Content-Range", `bytes ${start}-${end}/${size}`).send(Buffer.from(part.data));
 });
 
 app.get("/:file", (req, res, next) => {
@@ -559,7 +794,7 @@ app.use((error, req, res, next) => {
         return next(error);
     }
     if (error.type === "entity.too.large") {
-        return res.status(413).json({ error: "The submitted request is too large." });
+        return res.status(413).json({ error: "The submitted file or request is too large (PDFs up to 10 MB, photos up to 15 MB, videos up to 500 MB)." });
     }
     if (error.type === "entity.parse.failed") {
         return res.status(400).json({ error: "The submitted request is not valid JSON." });
@@ -570,31 +805,12 @@ app.use((error, req, res, next) => {
 
 async function startServer() {
     await fs.mkdir(path.dirname(databasePath), { recursive: true });
-    await fs.mkdir(path.dirname(siteContentPath), { recursive: true });
     const databaseFile = await fs.open(databasePath, "a", 0o600);
     try {
         await databaseFile.chmod(0o600);
     } finally {
         await databaseFile.close();
     }
-    try {
-        const storedContent = JSON.parse(await fs.readFile(siteContentPath, "utf8"));
-        siteContent = {};
-        for (const section of contentSections) {
-            const { content, error } = validateContentItems(section, storedContent[section]);
-            if (error) {
-                throw new Error(`Invalid ${section} in ${siteContentPath}: ${error}`);
-            }
-            siteContent[section] = content;
-        }
-    } catch (error) {
-        if (error.code !== "ENOENT") {
-            throw error;
-        }
-        siteContent = defaultSiteContent;
-        await fs.writeFile(siteContentPath, `${JSON.stringify(siteContent, null, 2)}\n`, { flag: "wx", mode: 0o600 });
-    }
-    await fs.chmod(siteContentPath, 0o600);
     database = new DatabaseSync(databasePath);
     database.exec("PRAGMA busy_timeout = 5000;");
     database.exec(`
@@ -606,13 +822,37 @@ async function startServer() {
             parent_name TEXT NOT NULL CHECK(length(parent_name) BETWEEN 1 AND 100),
             phone TEXT NOT NULL CHECK(length(phone) BETWEEN 7 AND 25),
             email TEXT,
-            grade TEXT NOT NULL CHECK(grade IN ('Playgroup', 'Nursery', 'LKG', 'UKG', 'Kindergarten', 'Class 1–5')),
+            grade TEXT NOT NULL CHECK(grade IN ('Playgroup', 'Nursery', 'LKG', 'UKG', 'Kindergarten', 'Class 1â€“5')),
             address TEXT NOT NULL CHECK(length(address) BETWEEN 1 AND 300),
             pin_code TEXT NOT NULL CHECK(length(pin_code) = 6 AND pin_code NOT GLOB '*[^0-9]*'),
             message TEXT NOT NULL DEFAULT '' CHECK(length(message) <= 2000),
             created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
         );
         CREATE INDEX IF NOT EXISTS enquiries_created_at ON enquiries(created_at DESC);
+        CREATE TABLE IF NOT EXISTS site_content (
+            section TEXT PRIMARY KEY CHECK(section IN ('notices', 'activities', 'events', 'gallery')),
+            items_json TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS hero_slides (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+            items_json TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS hero_settings (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+            seconds INTEGER NOT NULL CHECK(seconds BETWEEN 2 AND 30)
+        );
+        INSERT OR IGNORE INTO hero_settings (id, seconds) VALUES (1, 3);
+        CREATE TABLE IF NOT EXISTS admission_documents (
+            kind TEXT PRIMARY KEY CHECK(kind IN ('book-list', 'fee-structure', 'admission-form')),
+            data BLOB NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        );
+        CREATE TABLE IF NOT EXISTS media_files (
+            name TEXT PRIMARY KEY,
+            content_type TEXT NOT NULL,
+            data BLOB NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        );
         CREATE TABLE IF NOT EXISTS admin_users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -626,7 +866,106 @@ async function startServer() {
             expires_at INTEGER NOT NULL
         );
         CREATE INDEX IF NOT EXISTS admin_sessions_expiry ON admin_sessions(expires_at);
+        DROP TABLE IF EXISTS admin_password_resets;
     `);
+    if (!database.prepare("SELECT sql FROM sqlite_master WHERE name = 'site_content'").get().sql.includes("'events'")) {
+        database.exec(`
+            BEGIN IMMEDIATE;
+            ALTER TABLE site_content RENAME TO site_content_old;
+            CREATE TABLE site_content (
+                section TEXT PRIMARY KEY CHECK(section IN ('notices', 'activities', 'events', 'gallery')),
+                items_json TEXT NOT NULL
+            );
+            INSERT INTO site_content (section, items_json) SELECT section, items_json FROM site_content_old;
+            DROP TABLE site_content_old;
+            COMMIT;
+        `);
+    }
+    findSiteContent = database.prepare("SELECT items_json FROM site_content WHERE section = ?");
+    saveSiteContentStatement = database.prepare(`
+        INSERT INTO site_content (section, items_json) VALUES (?, ?)
+        ON CONFLICT(section) DO UPDATE SET items_json = excluded.items_json
+    `);
+    findHeroSettings = database.prepare("SELECT seconds FROM hero_settings WHERE id = 1");
+    listDocuments = database.prepare("SELECT kind, updated_at FROM admission_documents");
+    findDocument = database.prepare("SELECT data, updated_at FROM admission_documents WHERE kind = ?");
+    saveDocument = database.prepare(`
+        INSERT INTO admission_documents (kind, data, updated_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        ON CONFLICT(kind) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at
+    `);
+    deleteDocument = database.prepare("DELETE FROM admission_documents WHERE kind = ?");
+    findMedia = database.prepare("SELECT content_type, data FROM media_files WHERE name = ?");
+    findMediaMeta = database.prepare("SELECT content_type, length(data) AS size FROM media_files WHERE name = ?");
+    findMediaRange = database.prepare("SELECT substr(data, ?, ?) AS data FROM media_files WHERE name = ?");
+    saveMedia = database.prepare("INSERT INTO media_files (name, content_type, data) VALUES (?, ?, ?)");
+    deleteMedia = database.prepare("DELETE FROM media_files WHERE name = ?");
+    saveHeroSettingsStatement = database.prepare("UPDATE hero_settings SET seconds = ? WHERE id = 1");
+    findHeroSlides = database.prepare("SELECT items_json FROM hero_slides WHERE id = 1");
+    saveHeroSlidesStatement = database.prepare(`
+        INSERT INTO hero_slides (id, items_json) VALUES (1, ?)
+        ON CONFLICT(id) DO UPDATE SET items_json = excluded.items_json
+    `);
+    const storedSections = database.prepare("SELECT COUNT(*) AS count FROM site_content").get().count;
+    if (storedSections === 0) {
+        let initialContent = defaultSiteContent;
+        try {
+            const storedContent = JSON.parse(await fs.readFile(legacySiteContentPath, "utf8"));
+            initialContent = {};
+            for (const section of databaseContentSections) {
+                const { content, error } = validateContentItems(section, storedContent[section] ?? defaultSiteContent[section]);
+                if (error) {
+                    throw new Error(`Invalid ${section} in ${legacySiteContentPath}: ${error}`);
+                }
+                initialContent[section] = content;
+            }
+            const legacySlides = Array.isArray(storedContent.heroSlides)
+                ? storedContent.heroSlides
+                : defaultSiteContent.heroSlides;
+            const { content: heroSlides, error } = validateContentItems("heroSlides", legacySlides);
+            if (error) {
+                throw new Error(`Invalid heroSlides in ${legacySiteContentPath}: ${error}`);
+            }
+            initialContent.heroSlides = heroSlides;
+        } catch (error) {
+            if (error.code !== "ENOENT") {
+                throw error;
+            }
+        }
+
+        database.exec("BEGIN IMMEDIATE;");
+        try {
+            for (const section of databaseContentSections) {
+                saveSiteContentStatement.run(section, JSON.stringify(initialContent[section]));
+            }
+            saveHeroSlidesStatement.run(JSON.stringify(initialContent.heroSlides));
+            database.exec("COMMIT;");
+        } catch (error) {
+            database.exec("ROLLBACK;");
+            throw error;
+        }
+    }
+    if (!findHeroSlides.get()) {
+        let initialSlides = defaultSiteContent.heroSlides;
+        try {
+            const storedContent = JSON.parse(await fs.readFile(legacySiteContentPath, "utf8"));
+            if (Array.isArray(storedContent.heroSlides)) {
+                const { content, error } = validateContentItems("heroSlides", storedContent.heroSlides);
+                if (error) {
+                    throw new Error(`Invalid heroSlides in ${legacySiteContentPath}: ${error}`);
+                }
+                initialSlides = content;
+            }
+        } catch (error) {
+            if (error.code !== "ENOENT") {
+                throw error;
+            }
+        }
+        saveHeroSlidesStatement.run(JSON.stringify(initialSlides));
+    }
+    if (!findSiteContent.get("events")) {
+        saveSiteContentStatement.run("events", "[]");
+    }
+    readSiteContent();
     insertEnquiry = database.prepare(enquiryStatement);
     findAdminByEmail = database.prepare("SELECT id, email, password_hash FROM admin_users WHERE email = ?");
     findAdminById = database.prepare("SELECT id, email FROM admin_users WHERE id = ?");
@@ -642,7 +981,7 @@ async function startServer() {
                grade, address, pin_code AS pinCode, message, created_at AS createdAt
         FROM enquiries
         ORDER BY created_at DESC, id DESC
-        LIMIT 500
+        LIMIT 5000
     `);
 
     const adminCount = database.prepare("SELECT COUNT(*) AS count FROM admin_users").get().count;
@@ -656,6 +995,23 @@ async function startServer() {
         console.log(`Created the initial enquiry admin account for ${adminEmail}.`);
     } else if (adminCount === 0) {
         console.warn("No admin account exists. Set ADMIN_EMAIL and ADMIN_PASSWORD_HASH in .env, then restart.");
+    }
+    const resetPassword = process.env.ADMIN_RESET_PASSWORD;
+    if (resetPassword) {
+        if (!adminEmail || resetPassword.length < 12 || resetPassword.length > 256) {
+            throw new Error("ADMIN_RESET_PASSWORD needs ADMIN_EMAIL and a password of 12 to 256 characters.");
+        }
+        const existing = findAdminByEmail.get(adminEmail);
+        if (!existing) {
+            database.prepare("INSERT INTO admin_users (email, password_hash) VALUES (?, ?)")
+                .run(adminEmail, await hashPassword(resetPassword));
+            console.log(`Created the admin account for ${adminEmail} from ADMIN_RESET_PASSWORD.`);
+        } else if (!(await verifyPassword(resetPassword, existing.password_hash))) {
+            database.prepare("UPDATE admin_users SET password_hash = ? WHERE id = ?")
+                .run(await hashPassword(resetPassword), existing.id);
+            database.prepare("DELETE FROM admin_sessions WHERE admin_id = ?").run(existing.id);
+            console.log(`Admin password for ${adminEmail} was reset from ADMIN_RESET_PASSWORD.`);
+        }
     }
     deleteExpiredSessions.run(Date.now());
     dummyPasswordHash = await hashPassword(crypto.randomBytes(32).toString("hex"));

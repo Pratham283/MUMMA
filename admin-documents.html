@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Admission PDFs | School Admin | Mumma's Proud</title>
+    <link rel="icon" href="/logo.png" type="image/png">
+    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/admin.css">
+    <script src="/admin.js" defer></script>
+</head>
+<body class="admin-page">
+    <header class="admin-header">
+        <a class="brand" href="/" aria-label="Mumma's Proud Junior Wing School home">
+            <img src="/logo.png" alt="">
+            <span class="brand-copy">
+                <strong>Mumma's Proud</strong>
+                <span>School admin panel</span>
+            </span>
+        </a>
+        <a class="admin-home-link" href="/">View school website <span aria-hidden="true">↗</span></a>
+    </header>
+    <main class="admin-main">
+        <section class="admin-login-card" id="login-panel" aria-labelledby="login-title" hidden>
+            <p class="section-eyebrow">School administration</p>
+            <h1 id="login-title">School admin panel</h1>
+            <p class="admin-intro">Sign in to manage school notices, activities, gallery, and admission enquiries.</p>
+            <form id="login-form">
+                <label for="admin-email">Email address</label>
+                <input id="admin-email" name="email" type="email" autocomplete="username" maxlength="254" required>
+                <label for="admin-password">Password</label>
+                <input id="admin-password" name="password" type="password" autocomplete="current-password" maxlength="256" required>
+                <button class="admin-primary-button" type="submit">Sign in</button>
+                <p class="admin-message" id="login-message" role="status" aria-live="polite"></p>
+            </form>
+        </section>
+
+        <section class="admin-dashboard" id="dashboard-panel" hidden>
+            <div class="admin-title-row">
+                <div>
+                    <p class="section-eyebrow">School administration</p>
+                    <h1>School admin panel</h1>
+                    <p class="admin-intro" id="admin-identity"></p>
+                </div>
+                <button class="admin-secondary-button" id="logout-button" type="button">Sign out</button>
+            </div>
+            <p class="admin-message" id="dashboard-message" role="status" aria-live="polite"></p>
+            <nav class="admin-page-nav" aria-label="Admin sections">
+                <a href="/admin.html">Enquiries</a>
+                <a href="/admin-slideshow.html">Homepage slideshow</a>
+                <a href="/admin-notices.html">Notices</a>
+                <a href="/admin-activities.html">Activities</a>
+                <a href="/admin-events.html">Events</a>
+                <a href="/admin-gallery.html">Gallery</a>
+                <a href="/admin-documents.html" aria-current="page">Admission PDFs</a>
+            </nav>
+            <section class="admin-section" id="admin-documents" aria-labelledby="admin-documents-title">
+                <div class="admin-section-heading">
+                    <div>
+                        <p class="section-eyebrow">Admission menu</p>
+                        <h2 id="admin-documents-title">Admission PDFs</h2>
+                    </div>
+                </div>
+                <p class="admin-intro">These PDFs open from the website's Admission menu. Choose a PDF (up to 10 MB) or drag it onto a row to upload or replace it.</p>
+                <div class="admin-document-list" id="admin-document-list">
+                    <article class="admin-document-row" data-document-kind="book-list">
+                        <div class="admin-document-info"><h3>Book list</h3><p class="admin-document-status">Checking…</p></div>
+                        <div class="admin-content-actions">
+                            <button class="admin-secondary-button admin-file-button" type="button">Choose PDF</button><input class="admin-file-input" type="file" accept="application/pdf,.pdf" tabindex="-1" aria-hidden="true">
+                            <a class="admin-secondary-button" data-view target="_blank" rel="noopener" hidden>View</a>
+                            <button class="admin-danger-button" type="button" data-delete hidden>Delete</button>
+                        </div>
+                    </article>
+                    <article class="admin-document-row" data-document-kind="fee-structure">
+                        <div class="admin-document-info"><h3>Fee structure</h3><p class="admin-document-status">Checking…</p></div>
+                        <div class="admin-content-actions">
+                            <button class="admin-secondary-button admin-file-button" type="button">Choose PDF</button><input class="admin-file-input" type="file" accept="application/pdf,.pdf" tabindex="-1" aria-hidden="true">
+                            <a class="admin-secondary-button" data-view target="_blank" rel="noopener" hidden>View</a>
+                            <button class="admin-danger-button" type="button" data-delete hidden>Delete</button>
+                        </div>
+                    </article>
+                    <article class="admin-document-row" data-document-kind="admission-form">
+                        <div class="admin-document-info"><h3>Admission form</h3><p class="admin-document-status">Checking…</p></div>
+                        <div class="admin-content-actions">
+                            <button class="admin-secondary-button admin-file-button" type="button">Choose PDF</button><input class="admin-file-input" type="file" accept="application/pdf,.pdf" tabindex="-1" aria-hidden="true">
+                            <a class="admin-secondary-button" data-view target="_blank" rel="noopener" hidden>View</a>
+                            <button class="admin-danger-button" type="button" data-delete hidden>Delete</button>
+                        </div>
+                    </article>
+                </div>
+            </section>
+        </section>
+    </main>
+</body>
+</html>
