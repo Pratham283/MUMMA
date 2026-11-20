@@ -1,6 +1,50 @@
 
 const menuToggle = document.querySelector(".menu-toggle");
 const navigation = document.querySelector("#primary-navigation");
+const pendingSectionKey = "pending-navigation-section";
+const pendingSectionId = sessionStorage.getItem(pendingSectionKey);
+
+if (pendingSectionId && (location.pathname === "/" || location.pathname === "/index.html")) {
+    sessionStorage.removeItem(pendingSectionKey);
+    document.getElementById(pendingSectionId)?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    });
+}
+
+document.addEventListener("click", (event) => {
+    if (!(event.target instanceof Element) || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return;
+    }
+
+    const link = event.target.closest("a[href*='#']");
+    if (!link || link.target === "_blank" || link.hasAttribute("download")) {
+        return;
+    }
+
+    const url = new URL(link.href);
+    if (url.origin !== location.origin || !url.hash) {
+        return;
+    }
+
+    const sectionId = decodeURIComponent(url.hash.slice(1));
+    if (url.pathname === location.pathname) {
+        const target = document.getElementById(sectionId);
+        if (!target) {
+            return;
+        }
+
+        event.preventDefault();
+        const cleanPath = url.pathname === "/index.html" ? "/" : url.pathname;
+        history.replaceState(null, "", `${cleanPath}${url.search}`);
+        target.scrollIntoView({
+            behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        });
+    } else if (url.pathname === "/" || url.pathname === "/index.html") {
+        event.preventDefault();
+        sessionStorage.setItem(pendingSectionKey, sectionId);
+        location.assign(`/${url.search}`);
+    }
+});
 
 if (menuToggle && navigation) {
     menuToggle.addEventListener("click", () => {
@@ -95,6 +139,59 @@ function observeGalleryItems(galleryGrid, items) {
     items.forEach((item) => galleryObserver.observe(item));
 }
 
+function openNoticeDetail(notice) {
+    let dialog = document.querySelector("#notice-detail-dialog");
+    if (!dialog) {
+        dialog = document.createElement("dialog");
+        dialog.id = "notice-detail-dialog";
+        dialog.className = "notice-detail-dialog";
+        dialog.innerHTML = `
+            <button type="button" class="notice-detail-close" aria-label="Close notice">&times;</button>
+            <div class="notice-detail-content"></div>
+        `;
+        document.body.append(dialog);
+        dialog.querySelector(".notice-detail-close").addEventListener("click", () => dialog.close());
+        dialog.addEventListener("click", (event) => {
+            if (event.target === dialog) {
+                dialog.close();
+            }
+        });
+    }
+    const content = dialog.querySelector(".notice-detail-content");
+    content.replaceChildren();
+    const date = document.createElement("time");
+    date.className = "notice-detail-date";
+    date.dateTime = notice.date;
+    date.textContent = new Date(`${notice.date}T00:00:00`).toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+    });
+    const title = document.createElement("h2");
+    title.textContent = notice.title;
+    const body = document.createElement("p");
+    body.textContent = notice.body;
+    content.append(date, title, body);
+    if (notice.attachment) {
+        const preview = document.createElement(notice.attachmentType === "pdf" ? "iframe" : "img");
+        preview.className = "notice-detail-preview";
+        preview.src = notice.attachment;
+        if (preview.tagName === "IFRAME") {
+            preview.title = notice.title;
+        } else {
+            preview.alt = notice.attachmentName || notice.title;
+        }
+        const link = document.createElement("a");
+        link.className = "notice-detail-download";
+        link.href = notice.attachment;
+        link.target = "_blank";
+        link.rel = "noopener";
+        link.textContent = notice.attachmentType === "pdf" ? "Open PDF" : "Open image";
+        content.append(preview, link);
+    }
+    dialog.showModal();
+}
+
 function renderNoticeList(container, notices) {
     if (!container) {
         return;
@@ -109,31 +206,52 @@ function renderNoticeList(container, notices) {
     }
     const cards = visibleNotices.map((notice) => {
         const card = document.createElement("article");
-        card.className = `notice-card${notice.priority === "normal" ? "" : ` notice-card-${notice.priority}`}`;
-        const content = document.createElement("div");
-        content.className = "notice-card-content";
-        const meta = document.createElement("div");
-        meta.className = "notice-card-meta";
+        card.className = "notice-card notice-circular-card";
+        card.tabIndex = 0;
+        card.setAttribute("role", "button");
+        card.setAttribute("aria-label", `Open circular: ${notice.title}`);
+        card.addEventListener("click", () => openNoticeDetail(notice));
+        card.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                openNoticeDetail(notice);
+            }
+        });
+        const dateBar = document.createElement("div");
+        dateBar.className = "notice-date-bar";
         const date = document.createElement("time");
         date.dateTime = notice.date;
-        date.textContent = new Date(`${notice.date}T00:00:00`).toLocaleDateString();
-        meta.append(date);
-        if (notice.priority !== "normal") {
-            const priority = document.createElement("span");
-            priority.className = "notice-priority";
-            priority.textContent = notice.priority;
-            meta.append(priority);
-        }
+        date.textContent = `Date: ${new Date(`${notice.date}T00:00:00`).toLocaleDateString("en-GB", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+        }).replaceAll(" ", "-")}`;
+        dateBar.append(date);
+        const content = document.createElement("div");
+        content.className = "notice-card-content notice-circular-content";
         const title = document.createElement("h3");
         title.textContent = notice.title;
         const body = document.createElement("p");
         body.className = "notice-card-body";
         body.textContent = notice.body;
-        content.append(meta, title, body);
-        card.append(content);
+        content.append(title, body);
+        if (notice.attachment) {
+            const attachment = document.createElement("span");
+            attachment.className = "notice-attachment-indicator";
+            attachment.textContent = `${notice.attachmentType === "pdf" ? "PDF" : "Image"} attached · click to view`;
+            content.append(attachment);
+        }
+        card.append(dateBar, content);
         return card;
     });
-    container.replaceChildren(...cards);
+    if (container.id === "notice-preview-list") {
+        const track = document.createElement("div");
+        track.className = "notice-scroll-track";
+        track.append(...cards);
+        container.replaceChildren(track);
+    } else {
+        container.replaceChildren(...cards);
+    }
 }
 
 function makeActivityCard(activity, index, titleTag = "h3") {

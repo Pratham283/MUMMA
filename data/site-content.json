@@ -1,5 +1,27 @@
 {
-  "notices": [],
+  "notices": [
+    {
+      "id": "pre-board-exams",
+      "title": "Pre Board Exams (10th and 12th)",
+      "date": "2025-11-29",
+      "priority": "important",
+      "body": "Time Table for Pre-Board Exams for Grades 10th and 12th (2025-26)."
+    },
+    {
+      "id": "pt-two-examinations",
+      "title": "PT - II Examinations (2025-26)",
+      "date": "2025-11-26",
+      "priority": "important",
+      "body": "Time Table for PT - II Exams (Session 2025-26)."
+    },
+    {
+      "id": "cca-planner-december",
+      "title": "CCA Planner December-2025",
+      "date": "2025-11-26",
+      "priority": "normal",
+      "body": "View the December CCA activities and programme schedule."
+    }
+  ],
   "events": [],
   "heroSlideSeconds": 3,
   "heroSlides": [

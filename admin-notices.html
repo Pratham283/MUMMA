@@ -62,9 +62,12 @@
                         <h2 id="admin-notices-title">Notices</h2>
                     </div>
                 </div>
-                <p class="admin-intro">Add, edit, or remove notices shown on the home page and the separate Notices page. Drag cards to change their order. Changes are saved in the website's SQLite database.</p>
+                <p class="admin-intro">Add written notices and attach a PDF or image. After saving, the notice and its attachment are available on the home page and Notices page. Edit, remove, or drag notices to change their order. Changes are saved in the website's SQLite database.</p>
                 <form class="notice-admin-form" id="notice-form">
                     <input type="hidden" name="id">
+                    <input type="hidden" name="attachment">
+                    <input type="hidden" name="attachmentType">
+                    <input type="hidden" name="attachmentName">
                     <label class="notice-admin-title">Notice title
                         <input name="title" maxlength="120" required>
                     </label>
@@ -81,6 +84,12 @@
                     <label class="notice-admin-body">Notice details
                         <textarea name="body" maxlength="2000" required></textarea>
                     </label>
+                    <div class="notice-admin-attachment">
+                        <button class="admin-secondary-button" type="button" data-choose-upload>Choose PDF or image</button>
+                        <input class="admin-file-input" type="file" data-upload-target="attachment" accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp" tabindex="-1" aria-hidden="true">
+                        <span class="upload-status" role="status">No attachment chosen yet.</span>
+                        <button class="admin-secondary-button" type="button" data-clear-notice-attachment hidden>Remove attachment</button>
+                    </div>
                     <button class="admin-primary-button" type="submit">Add notice</button>
                     <button class="admin-secondary-button" type="button" data-cancel-edit="notices" hidden>Cancel edit</button>
                 </form>

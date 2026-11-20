@@ -11,7 +11,7 @@
     "admin:reset": "node scripts/reset-admin-password.js"
   },
   "engines": {
-    "node": ">=22.13.0"
+    "node": ">=22.13.0 <25"
   },
   "dependencies": {
     "dotenv": "^18.0.8",

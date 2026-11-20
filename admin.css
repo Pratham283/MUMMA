@@ -349,6 +349,14 @@
     justify-self: start;
 }
 
+.notice-admin-attachment {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
 .admin-notice-list {
     display: grid;
     gap: 12px;
@@ -395,6 +403,16 @@
     margin-top: 8px;
     color: #7a8492;
     font-size: 0.75rem;
+}
+
+.admin-notice-attachment-link {
+    display: inline-block;
+    margin-top: 8px;
+    color: #24477d;
+    font-size: 0.82rem;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+    text-underline-offset: 3px;
 }
 
 .admin-notice-card .admin-danger-button {

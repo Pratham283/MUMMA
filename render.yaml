@@ -3,16 +3,16 @@ services:
     name: mummas-proud-school
     runtime: node
     plan: starter
-    buildCommand: npm install
+    buildCommand: npm ci
     startCommand: npm start
-    healthCheckPath: /api/content
+    healthCheckPath: /api/health
     disk:
       name: school-data
       mountPath: /var/data
       sizeGB: 5
     envVars:
       - key: NODE_VERSION
-        value: 22.13.0
+        value: 24.22.1
       - key: NODE_ENV
         value: production
       - key: TRUST_PROXY_HOPS

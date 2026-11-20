@@ -158,6 +158,14 @@ function renderNotices() {
             makeElement("p", "", notice.body),
             makeElement("p", "admin-notice-meta", `${notice.date} · ${notice.priority}`)
         );
+        if (notice.attachment) {
+            const attachmentLink = makeElement("a", "admin-notice-attachment-link",
+                `View ${notice.attachmentType === "pdf" ? "PDF" : "image"}: ${notice.attachmentName || "attachment"}`);
+            attachmentLink.href = notice.attachment;
+            attachmentLink.target = "_blank";
+            attachmentLink.rel = "noopener";
+            content.append(attachmentLink);
+        }
         const actions = makeElement("div", "admin-content-actions");
         actions.append(makeElement("span", "admin-drag-handle", "↕ Drag to reorder"));
         actions.append(
@@ -281,6 +289,10 @@ function resetContentForm(section) {
     form.reset();
     form.elements.namedItem("id").value = "";
     setUploadStatus(form, "No file chosen yet.");
+    const removeAttachmentButton = form.querySelector("[data-clear-notice-attachment]");
+    if (removeAttachmentButton) {
+        removeAttachmentButton.hidden = true;
+    }
     const addLabels = { heroSlides: "Add slide", gallery: "Add photo", notices: "Add notice", activities: "Add activity", events: "Add event" };
     form.querySelector('button[type="submit"]').textContent = addLabels[section];
     form.querySelector(`[data-cancel-edit="${section}"]`).hidden = true;
@@ -306,7 +318,15 @@ function editContentItem(section, id) {
         }
     });
     form.querySelector('button[type="submit"]').textContent = "Save changes";
-    setUploadStatus(form, "Current file is kept. Choose a new file only to replace it.");
+    if (section === "notices" && item.attachment) {
+        setUploadStatus(form, `Current attachment: ${item.attachmentName || "file"}. Choose a new file to replace it.`);
+    } else {
+        setUploadStatus(form, "Current file is kept. Choose a new file only to replace it.");
+    }
+    const removeAttachmentButton = form.querySelector("[data-clear-notice-attachment]");
+    if (removeAttachmentButton) {
+        removeAttachmentButton.hidden = !item.attachment;
+    }
     form.querySelector(`[data-cancel-edit="${section}"]`).hidden = false;
     if (section === "heroSlides") {
         form.elements.namedItem("src").value = item.src || item.image || "";
@@ -327,7 +347,7 @@ async function saveContentSection(section, items) {
     showMessage(dashboardMessage, result.message);
 }
 
-const mediaMimeByExtension = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", mp4: "video/mp4", webm: "video/webm" };
+const mediaMimeByExtension = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", pdf: "application/pdf", mp4: "video/mp4", webm: "video/webm" };
 
 document.querySelectorAll("[data-choose-upload]").forEach((button) => {
     button.addEventListener("click", () => button.form.querySelector("input[data-upload-target]").click());
@@ -342,13 +362,14 @@ document.querySelectorAll("input[data-upload-target]").forEach((input) => {
         const form = input.form;
         const mimeType = mediaMimeByExtension[file.name.split(".").pop().toLowerCase()] || file.type;
         const isVideo = mimeType.startsWith("video/");
+        const isPdf = mimeType === "application/pdf";
         if (!mimeType || !Object.values(mediaMimeByExtension).includes(mimeType)) {
-            showMessage(dashboardMessage, "Please choose a JPG, PNG, WEBP photo or an MP4, WEBM video.", true);
+            showMessage(dashboardMessage, "Please choose a JPG, PNG, WEBP photo, PDF, or MP4/WEBM video.", true);
             input.value = "";
             return;
         }
-        if (file.size > (isVideo ? 500 : 15) * 1024 * 1024) {
-            showMessage(dashboardMessage, isVideo ? "Videos must be 500 MB or smaller." : "Photos must be 15 MB or smaller.", true);
+        if (file.size > (isVideo ? 500 : isPdf ? 10 : 15) * 1024 * 1024) {
+            showMessage(dashboardMessage, isVideo ? "Videos must be 500 MB or smaller." : isPdf ? "PDF documents must be 10 MB or smaller." : "Photos must be 15 MB or smaller.", true);
             input.value = "";
             return;
         }
@@ -366,6 +387,18 @@ document.querySelectorAll("input[data-upload-target]").forEach((input) => {
             if (typeField) {
                 typeField.value = result.type;
             }
+            const attachmentTypeField = form.elements.namedItem("attachmentType");
+            if (attachmentTypeField) {
+                attachmentTypeField.value = result.type === "pdf" ? "pdf" : "image";
+            }
+            const attachmentNameField = form.elements.namedItem("attachmentName");
+            if (attachmentNameField) {
+                attachmentNameField.value = file.name;
+            }
+            const removeAttachmentButton = form.querySelector("[data-clear-notice-attachment]");
+            if (removeAttachmentButton) {
+                removeAttachmentButton.hidden = false;
+            }
             setUploadStatus(form, `Ready: ${file.name}`);
             showMessage(dashboardMessage, "File uploaded. Press the save button to publish it.");
         } catch (error) {
@@ -377,6 +410,16 @@ document.querySelectorAll("input[data-upload-target]").forEach((input) => {
             input.value = "";
         }
     });
+});
+
+document.querySelector("[data-clear-notice-attachment]")?.addEventListener("click", (event) => {
+    const form = event.currentTarget.form;
+    form.elements.namedItem("attachment").value = "";
+    form.elements.namedItem("attachmentType").value = "";
+    form.elements.namedItem("attachmentName").value = "";
+    form.querySelector("[data-upload-target='attachment']").value = "";
+    setUploadStatus(form, "Attachment removed. Save the notice to publish this change.");
+    event.currentTarget.hidden = true;
 });
 
 for (const [section, form] of Object.entries(contentForms).filter(([, form]) => form)) {

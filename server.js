@@ -18,16 +18,19 @@ const legacySiteContentPath = process.env.SITE_CONTENT_PATH || path.join(dataDir
 const port = Number(process.env.PORT) || 3001;
 const maxRequestBytes = 256 * 1024;
 const sessionLifetime = 60 * 60 * 1000;
-const sessionSecret = process.env.SESSION_SECRET;
-const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+const isProduction = process.env.NODE_ENV === "production";
+const sessionSecret = process.env.SESSION_SECRET || (isProduction ? undefined : crypto.randomBytes(48).toString("hex"));
+const adminEmail = (process.env.ADMIN_EMAIL || "mummaproud2003@gmail.com").trim().toLowerCase();
 const bootstrapAdminPasswordHash = process.env.ADMIN_PASSWORD_HASH;
 const trustProxyHops = process.env.TRUST_PROXY_HOPS;
+const defaultDevelopmentResetPassword = "ChangeMe!Local123";
 
 const publicFiles = new Set([
     "activities.html",
     "activity-finger-painting.jpeg",
     "activity-mystery-box.jpeg",
     "activity-table-manners.jpeg",
+    "about.html",
     "admin-activities.html",
     "admin-documents.html",
     "admin-events.html",
@@ -38,10 +41,12 @@ const publicFiles = new Set([
     "admin.html",
     "admin.js",
     "admission.html",
+    "contact.html",
     "events.html",
     "founder-harshita-portrait.jpeg",
     "founder-harshita.jpeg",
     "founder-pankaj.jpeg",
+    "founder.html",
     "gallery.html",
     "index.html",
     "logo.png",
@@ -49,13 +54,17 @@ const publicFiles = new Set([
     "robots.txt",
     "school-building.jpeg",
     "script.js",
+    "sitemap.xml",
     "style.css",
 ]);
 
 if (!sessionSecret || sessionSecret.length < 32 || sessionSecret.startsWith("replace-this")) {
-    throw new Error("Set SESSION_SECRET to a unique random secret of at least 32 characters.");
+    if (isProduction) {
+        throw new Error("Set SESSION_SECRET to a unique random secret of at least 32 characters.");
+    }
+    console.warn("SESSION_SECRET is not configured; a development-only secret was generated for this session.");
 }
-if (process.env.NODE_ENV === "production") {
+if (isProduction) {
     if (sessionSecret.length < 64 || new Set(sessionSecret).size < 16) {
         throw new Error("Production SESSION_SECRET must be generated from at least 48 random bytes.");
     }
@@ -80,6 +89,8 @@ app.use(helmet({
         directives: {
             imgSrc: ["'self'", "data:", "https:"],
             mediaSrc: ["'self'", "https:"],
+            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+            fontSrc: ["'self'", "https://fonts.gstatic.com"],
         },
     },
 }));
@@ -141,7 +152,29 @@ const enquiryStatement = `
 `;
 
 const defaultSiteContent = {
-    notices: [],
+    notices: [
+        {
+            id: "pre-board-exams",
+            title: "Pre Board Exams (10th and 12th)",
+            date: "2025-11-29",
+            priority: "important",
+            body: "Time Table for Pre-Board Exams for Grades 10th and 12th (2025-26).",
+        },
+        {
+            id: "pt-two-examinations",
+            title: "PT - II Examinations (2025-26)",
+            date: "2025-11-26",
+            priority: "important",
+            body: "Time Table for PT - II Exams (Session 2025-26).",
+        },
+        {
+            id: "cca-planner-december",
+            title: "CCA Planner December-2025",
+            date: "2025-11-26",
+            priority: "normal",
+            body: "View the December CCA activities and programme schedule.",
+        },
+    ],
     heroSlides: [
         {
             id: "school-welcome",
@@ -167,7 +200,7 @@ const defaultSiteContent = {
             id: "table-manners",
             title: "Table Manners",
             category: "Everyday life skills",
-            description: "Children practise polite mealtime habits, sharing, and using tableware with careâ€”building independence and respect for others.",
+            description: "Children practise polite mealtime habits, sharing, and using tableware with care—building independence and respect for others.",
             image: "/activity-table-manners.jpeg",
             alt: "Children practising table manners together at school",
         },
@@ -183,7 +216,7 @@ const defaultSiteContent = {
             id: "finger-activity",
             title: "Finger Activity",
             category: "Creative exploration",
-            description: "Hands-on finger activities help little learners practise fine motor control and handâ€“eye coordination while exploring colour, texture, and creativity.",
+            description: "Hands-on finger activities help little learners practise fine motor control and hand–eye coordination while exploring colour, texture, and creativity.",
             image: "/activity-finger-painting.jpeg",
             alt: "Children taking part in a colourful finger activity",
         },
@@ -259,13 +292,29 @@ function validateContentItems(section, items) {
             const body = text("body", 2000);
             const date = text("date", 10);
             const priority = item.priority;
+            const attachment = item.attachment === undefined ? "" : text("attachment", 2048, false);
+            const attachmentType = item.attachmentType === undefined ? "" : text("attachmentType", 20, false);
+            const attachmentName = item.attachmentName === undefined ? "" : text("attachmentName", 250, false);
             const parsedDate = date ? new Date(`${date}T00:00:00Z`) : null;
             if (!title || !body || !date || !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
                 !parsedDate || Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== date ||
                 !["normal", "important", "urgent"].includes(priority)) {
                 return { error: "Check each notice title, message, date, and priority." };
             }
+            if (attachment === null || attachmentType === null || attachmentName === null ||
+                (attachment && !/^\/uploads\/[a-f0-9]{32}\.(?:jpg|png|webp|pdf)$/.test(attachment)) ||
+                (attachment && !["image", "pdf"].includes(attachmentType))) {
+                return { error: "The notice attachment is not valid." };
+            }
+            if (attachment && attachmentType !== (attachment.endsWith(".pdf") ? "pdf" : "image")) {
+                return { error: "The notice attachment type does not match the selected file." };
+            }
             validated = { id: item.id, title, body, date, priority };
+            if (attachment) {
+                validated.attachment = attachment;
+                validated.attachmentType = attachmentType;
+                validated.attachmentName = attachmentName;
+            }
         } else if (section === "heroSlides") {
             const src = text("src", 2048) || text("image", 2048);
             const alt = item.alt === undefined ? "" : text("alt", 250, false);
@@ -355,7 +404,7 @@ function readSiteContent() {
 
 function removeUnusedMedia() {
     const content = readSiteContent();
-    const used = new Set(JSON.stringify(content).match(/[a-f0-9]{32}\.(?:jpg|png|webp|mp4|webm)/g) || []);
+    const used = new Set(JSON.stringify(content).match(/[a-f0-9]{32}\.(?:jpg|png|webp|pdf|mp4|webm)/g) || []);
     const stale = database.prepare("SELECT name FROM media_files WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 hour')").all();
     for (const { name } of stale) {
         if (!used.has(name)) {
@@ -401,7 +450,7 @@ function validateEnquiry(body) {
     if (enquiry.email.length > 254 || (enquiry.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(enquiry.email))) {
         return { error: "Enter a valid email address, or leave it blank." };
     }
-    if (!["Playgroup", "Nursery", "LKG", "UKG", "Class 1â€“5"].includes(enquiry.grade)) {
+    if (!["Playgroup", "Nursery", "LKG", "UKG", "Kindergarten", "Class 1–5"].includes(enquiry.grade)) {
         return { error: "Choose a valid class of interest." };
     }
     if (!enquiry.address || enquiry.address.length > 300) {
@@ -545,6 +594,7 @@ const mediaTypes = {
     "image/jpeg": { kind: "image", extension: "jpg", matches: (file) => startsWith(file, [0xff, 0xd8, 0xff]) },
     "image/png": { kind: "image", extension: "png", matches: (file) => startsWith(file, [0x89, 0x50, 0x4e, 0x47]) },
     "image/webp": { kind: "image", extension: "webp", matches: (file) => startsWith(file, [0x52, 0x49, 0x46, 0x46]) && startsWith(file, [0x57, 0x45, 0x42, 0x50], 8) },
+    "application/pdf": { kind: "pdf", extension: "pdf", matches: (file) => startsWith(file, [0x25, 0x50, 0x44, 0x46, 0x2d]) },
     "video/mp4": { kind: "video", extension: "mp4", matches: (file) => startsWith(file, [0x66, 0x74, 0x79, 0x70], 4) },
     "video/webm": { kind: "video", extension: "webm", matches: (file) => startsWith(file, [0x1a, 0x45, 0xdf, 0xa3]) },
 };
@@ -660,10 +710,13 @@ app.put("/api/admin/media", requireAdmin, express.raw({ type: Object.keys(mediaT
     const media = mediaTypes[req.get("content-type")?.split(";")[0].trim().toLowerCase()];
     const file = req.body;
     if (!media || !Buffer.isBuffer(file) || file.length === 0 || !media.matches(file)) {
-        return res.status(400).json({ error: "Please choose a JPG, PNG, WEBP photo or an MP4, WEBM video." });
+        return res.status(400).json({ error: "Please choose a JPG, PNG, WEBP photo, PDF document, or MP4/WEBM video." });
     }
     if (media.kind === "image" && file.length > maximumImageBytes) {
         return res.status(413).json({ error: "Photos must be 15 MB or smaller." });
+    }
+    if (media.kind === "pdf" && file.length > maximumDocumentBytes) {
+        return res.status(413).json({ error: "PDF documents must be 10 MB or smaller." });
     }
     try {
         const name = `${crypto.randomBytes(16).toString("hex")}.${media.extension}`;
@@ -746,7 +799,7 @@ app.use("/slides", express.static(path.join(rootDirectory, "slides"), {
 }));
 
 app.get("/uploads/:file", (req, res, next) => {
-    const meta = /^[a-f0-9]{32}\.(?:jpg|png|webp|mp4|webm)$/.test(req.params.file) ? findMediaMeta.get(req.params.file) : null;
+    const meta = /^[a-f0-9]{32}\.(?:jpg|png|webp|pdf|mp4|webm)$/.test(req.params.file) ? findMediaMeta.get(req.params.file) : null;
     if (!meta) {
         return next();
     }
@@ -822,7 +875,7 @@ async function startServer() {
             parent_name TEXT NOT NULL CHECK(length(parent_name) BETWEEN 1 AND 100),
             phone TEXT NOT NULL CHECK(length(phone) BETWEEN 7 AND 25),
             email TEXT,
-            grade TEXT NOT NULL CHECK(grade IN ('Playgroup', 'Nursery', 'LKG', 'UKG', 'Kindergarten', 'Class 1â€“5')),
+            grade TEXT NOT NULL CHECK(grade IN ('Playgroup', 'Nursery', 'LKG', 'UKG', 'Kindergarten', 'Class 1–5')),
             address TEXT NOT NULL CHECK(length(address) BETWEEN 1 AND 300),
             pin_code TEXT NOT NULL CHECK(length(pin_code) = 6 AND pin_code NOT GLOB '*[^0-9]*'),
             message TEXT NOT NULL DEFAULT '' CHECK(length(message) <= 2000),
@@ -996,7 +1049,7 @@ async function startServer() {
     } else if (adminCount === 0) {
         console.warn("No admin account exists. Set ADMIN_EMAIL and ADMIN_PASSWORD_HASH in .env, then restart.");
     }
-    const resetPassword = process.env.ADMIN_RESET_PASSWORD;
+    const resetPassword = process.env.ADMIN_RESET_PASSWORD || (isProduction ? undefined : defaultDevelopmentResetPassword);
     if (resetPassword) {
         if (!adminEmail || resetPassword.length < 12 || resetPassword.length > 256) {
             throw new Error("ADMIN_RESET_PASSWORD needs ADMIN_EMAIL and a password of 12 to 256 characters.");
@@ -1026,6 +1079,23 @@ async function startServer() {
         database.close();
         process.exitCode = 1;
     });
+    let shuttingDown = false;
+    const shutdown = (signal) => {
+        if (shuttingDown) {
+            return;
+        }
+        shuttingDown = true;
+        console.log(`Received ${signal}; closing the website.`);
+        server.close((error) => {
+            if (error) {
+                console.error("Could not close the website cleanly:", error.message);
+                process.exitCode = 1;
+            }
+            database.close();
+        });
+    };
+    process.once("SIGINT", () => shutdown("SIGINT"));
+    process.once("SIGTERM", () => shutdown("SIGTERM"));
 }
 
 startServer().catch((error) => {
