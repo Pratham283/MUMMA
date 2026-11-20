@@ -35,13 +35,17 @@
         </a>
         <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-navigation" aria-label="Open navigation menu"><span></span><span></span><span></span></button>
         <ul class="nav-links" id="primary-navigation">
-          <li><a class="nav-link" href="/">Home</a></li>
-          <li><a class="nav-link" href="/about.html">About Us</a></li>
+          <li class="nav-dropdown">
+            <button class="nav-link nav-dropdown-toggle" type="button" aria-expanded="false" aria-haspopup="true">About Us <span class="nav-caret" aria-hidden="true">▾</span></button>
+            <ul class="nav-dropdown-menu">
+              <li><a class="nav-dropdown-link" href="/about.html">Overview</a></li>
+              <li><a class="nav-dropdown-link" href="/activities.html">Activities</a></li>
+              <li><a class="nav-dropdown-link" href="/events.html">Events</a></li>
+              <li><a class="nav-dropdown-link" href="/gallery.html">Gallery</a></li>
+            </ul>
+          </li>
           <li><a class="nav-link" href="/founder.html">Founder</a></li>
-          <li><a class="nav-link" href="/activities.html">Activities</a></li>
           <li><a class="nav-link" href="/notices.html">Notices</a></li>
-          <li><a class="nav-link" href="/events.html">Events</a></li>
-          <li><a class="nav-link" href="/gallery.html">Gallery</a></li>
           <li class="nav-dropdown">
             <button class="nav-link nav-dropdown-toggle" type="button" aria-expanded="false" aria-haspopup="true">Admission <span class="nav-caret" aria-hidden="true">▾</span></button>
             <ul class="nav-dropdown-menu">
@@ -50,7 +54,7 @@
               <li><a class="nav-dropdown-link" href="/documents/admission-form.pdf" data-document-kind="admission-form" target="_blank" rel="noopener">Admission form</a></li>
             </ul>
           </li>
-          <li><a class="nav-link" href="/contact.html" aria-current="page">Contact</a></li>
+          <li><a class="nav-link" href="/contact.html" aria-current="page">Contact Us</a></li>
           <li><a class="nav-link nav-contact" href="/admission.html">Enquire Now <span aria-hidden="true">↗</span></a></li>
         </ul>
       </nav>
