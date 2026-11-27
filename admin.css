@@ -8,6 +8,24 @@
     display: none !important;
 }
 
+.admin-page,
+.admin-main,
+.admin-dashboard,
+.admin-section {
+    width: 100%;
+    min-width: 0;
+}
+
+.admin-page-nav {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+}
+
+.admin-page-nav a {
+    flex: 0 0 auto;
+}
+
 .admin-header {
     display: flex;
     min-height: 86px;

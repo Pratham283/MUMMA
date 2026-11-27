@@ -1,9 +1,8 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="robots" content="noindex, nofollow">
     <title>Homepage slideshow | School Admin | Mumma's Proud</title>
     <link rel="icon" href="/logo.png" type="image/png">
     <link rel="stylesheet" href="/style.css">
@@ -24,8 +23,7 @@
     <main class="admin-main">
         <section class="admin-login-card" id="login-panel" aria-labelledby="login-title" hidden>
             <p class="section-eyebrow">School administration</p>
-            <h1 id="login-title">School admin panel</h1>
-            <p class="admin-intro">Sign in to manage school notices, activities, gallery, and admission enquiries.</p>
+            <h1 id="login-title">Admin sign in</h1>
             <form id="login-form">
                 <label for="admin-email">Email address</label>
                 <input id="admin-email" name="email" type="email" autocomplete="username" maxlength="254" required>
@@ -35,13 +33,11 @@
                 <p class="admin-message" id="login-message" role="status" aria-live="polite"></p>
             </form>
         </section>
-
         <section class="admin-dashboard" id="dashboard-panel" hidden>
-            <div class="admin-title-row">
+            <div class="admin-dashboard-heading">
                 <div>
-                    <p class="section-eyebrow">School administration</p>
-                    <h1>School admin panel</h1>
-                    <p class="admin-intro" id="admin-identity"></p>
+                    <p class="section-eyebrow">Website content</p>
+                    <h1>Homepage slideshow</h1>
                 </div>
                 <button class="admin-secondary-button" id="logout-button" type="button">Sign out</button>
             </div>
@@ -59,10 +55,10 @@
                 <div class="admin-section-heading">
                     <div>
                         <p class="section-eyebrow">Homepage first impression</p>
-                        <h2 id="admin-hero-slides-title">Full-screen slideshow</h2>
+                        <h2 id="admin-hero-slides-title">Full-width slideshow</h2>
                     </div>
                 </div>
-                <p class="admin-intro">Manage the full-screen slideshow at the top of the homepage. It shows only photos and videos (no text). Add up to 5 slides, edit or delete them, and drag cards to change their order. Choose a photo or video from your computer or phone. Photos: JPG, PNG, WEBP. Videos: MP4, WEBM.</p>
+                <p class="admin-intro">Manage the full-width homepage slideshow. Add up to 5 photos or videos, edit or delete slides, and drag cards to change their order.</p>
                 <form class="activity-admin-form" id="hero-slide-form">
                     <input type="hidden" name="id">
                     <label>Slide type
@@ -72,7 +68,7 @@
                         </select>
                     </label>
                     <div class="activity-admin-photo upload-field">
-                        <span>Photo or video (photo up to 15 MB, video up to 500 MB)</span>
+                        <span>Photo or video</span>
                         <input name="src" type="hidden">
                         <button class="admin-secondary-button" type="button" data-choose-upload>Choose photo or video</button>
                         <input class="admin-file-input" type="file" data-upload-target="src" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,.jpg,.jpeg,.png,.webp,.mp4,.webm" tabindex="-1" aria-hidden="true">
@@ -86,7 +82,7 @@
                 </form>
                 <p class="admin-intro" id="hero-slide-limit" role="status"></p>
                 <form class="activity-admin-form" id="hero-timing-form">
-                    <label>Each photo stays for (seconds, 2 to 30)
+                    <label>Each photo stays for (seconds)
                         <input name="seconds" type="number" min="2" max="30" step="1" value="3" required>
                     </label>
                     <button class="admin-primary-button" type="submit">Save slide time</button>

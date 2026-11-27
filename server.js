@@ -36,7 +36,6 @@ const publicFiles = new Set([
     "admin-events.html",
     "admin-gallery.html",
     "admin-notices.html",
-    "admin-slideshow.html",
     "admin.css",
     "admin.html",
     "admin.js",
@@ -56,6 +55,8 @@ const publicFiles = new Set([
     "script.js",
     "sitemap.xml",
     "style.css",
+    "homepage-slide.jpeg",
+    "admin-slideshow.html",
 ]);
 
 if (!sessionSecret || sessionSecret.length < 32 || sessionSecret.startsWith("replace-this")) {
@@ -177,22 +178,10 @@ const defaultSiteContent = {
     ],
     heroSlides: [
         {
-            id: "school-welcome",
+            id: "homepage-announcement",
             type: "image",
-            src: "/school-building.jpeg",
-            alt: "Mumma's Proud Junior Wing School building in Gwalior",
-        },
-        {
-            id: "learning-together",
-            type: "image",
-            src: "/activity-table-manners.jpeg",
-            alt: "Children learning table manners together at school",
-        },
-        {
-            id: "curious-learners",
-            type: "image",
-            src: "/activity-mystery-box.jpeg",
-            alt: "Children exploring a mystery learning box with their teacher",
+            src: "/homepage-slide.jpeg",
+            alt: "Mumma's Proud school announcement",
         },
     ],
     activities: [
