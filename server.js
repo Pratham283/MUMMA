@@ -51,7 +51,6 @@ const publicFiles = new Set([
     "logo.png",
     "notices.html",
     "robots.txt",
-    "school-building.jpeg",
     "script.js",
     "sitemap.xml",
     "style.css",
@@ -216,8 +215,8 @@ const defaultSiteContent = {
             id: "school",
             title: "A happy place to grow",
             caption: "Welcome to our school",
-            image: "/school-building.jpeg",
-            alt: "The Mumma's Proud Junior Wing School building",
+            image: "/homepage-slide.jpeg",
+            alt: "Children learning in the Mumma's Proud Junior Wing School classroom",
         },
         {
             id: "table-manners",
@@ -1006,6 +1005,20 @@ async function startServer() {
     }
     if (!findSiteContent.get("events")) {
         saveSiteContentStatement.run("events", "[]");
+    }
+    const galleryRow = findSiteContent.get("gallery");
+    if (galleryRow) {
+        const galleryItems = JSON.parse(galleryRow.items_json);
+        if (galleryItems.some((item) => item.image === "/school-building.jpeg")) {
+            const repairedGallery = galleryItems.map((item) => item.image === "/school-building.jpeg"
+                ? { ...item, image: "/homepage-slide.jpeg", alt: "Children learning in the Mumma's Proud Junior Wing School classroom" }
+                : item);
+            const { content, error } = validateContentItems("gallery", repairedGallery);
+            if (error) {
+                throw new Error(`The gallery content could not be repaired: ${error}`);
+            }
+            saveSiteContentStatement.run("gallery", JSON.stringify(content));
+        }
     }
     readSiteContent();
     insertEnquiry = database.prepare(enquiryStatement);

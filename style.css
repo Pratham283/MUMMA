@@ -11,6 +11,7 @@
     --navy-dark: #193761;
     --gold: #d5ad58;
     --cream: #fffdf8;
+    --page-surface: linear-gradient(135deg, #f7f4ec, #fffdf8 58%, #eef2f8);
 }
 
 html {
@@ -131,7 +132,7 @@ main #home {
     padding: clamp(58px, 8vw, 104px) 6%;
     background:
         radial-gradient(ellipse at 92% 14%, rgb(213 173 88 / 12%), transparent 30%),
-        #fff;
+        var(--page-surface);
 }
 
 .about-inner {
@@ -931,7 +932,7 @@ main #home {
     padding: clamp(58px, 8vw, 96px) 6%;
     background:
         radial-gradient(ellipse at 92% 12%, rgb(213 173 88 / 12%), transparent 30%),
-        #fff;
+        var(--page-surface);
 }
 
 .gallery-page-section {
@@ -939,7 +940,7 @@ main #home {
     padding: clamp(42px, 7vw, 76px) 6%;
     background:
         radial-gradient(ellipse at 92% 12%, rgb(213 173 88 / 12%), transparent 30%),
-        #fff;
+        var(--page-surface);
 }
 
 .gallery-page-heading {
@@ -2474,20 +2475,6 @@ footer {
     color: #c4cede;
     font-size: 0.8rem;
     text-align: center;
-}
-
-.admin-login-link {
-    color: #e3c77f;
-    font-weight: 700;
-    text-decoration: none;
-    transition: color 160ms ease;
-}
-
-.admin-login-link:hover,
-.admin-login-link:focus-visible {
-    color: #fff;
-    text-decoration: underline;
-    text-underline-offset: 3px;
 }
 
 @media (max-width: 900px) {
